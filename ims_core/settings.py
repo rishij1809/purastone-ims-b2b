@@ -51,6 +51,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ims_core.wsgi.application'
 
+import shutil
+
+IS_VERCEL = os.getenv('VERCEL') == '1' or 'VERCEL' in os.environ
+
 # Database configuration: PostgreSQL with SQLite fallback
 DB_NAME = os.getenv('DB_NAME')
 if DB_NAME:
@@ -65,10 +69,20 @@ if DB_NAME:
         }
     }
 else:
+    db_path = BASE_DIR / 'db.sqlite3'
+    if IS_VERCEL:
+        tmp_db = Path('/tmp/db.sqlite3')
+        if not tmp_db.exists() and db_path.exists():
+            try:
+                shutil.copy2(db_path, tmp_db)
+            except Exception:
+                pass
+        db_path = tmp_db
+
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': db_path,
             'OPTIONS': {
                 'timeout': 20,
             }
@@ -83,8 +97,15 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = Path('/tmp/static') if IS_VERCEL else (BASE_DIR / 'static')
+
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+if IS_VERCEL:
+    MEDIA_ROOT = Path('/tmp/media')
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+else:
+    MEDIA_ROOT = BASE_DIR / 'media'
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
