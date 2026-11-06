@@ -1,0 +1,12 @@
+/* Reset all default Vite constraints to ensure 100% full-screen ERP layout */
+html, body, #root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
