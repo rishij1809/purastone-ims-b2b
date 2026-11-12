@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import FinanceCommandCenter from './components/FinanceCommandCenter';
 
 const API_BASE = import.meta.env.VITE_API_BASE || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8000/api' : '/api');
 
@@ -71,6 +72,7 @@ function generateAutoPoNumber(storeId) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('inv_dashboard');
+  const [erpRole, setErpRole] = useState('ADMIN');
   const [inventory, setInventory] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -547,6 +549,15 @@ export default function App() {
     { id: 'ws_invoices', keycode: '[F13]', label: 'B2B Invoices & PDFs' },
   ];
 
+  const financeNavItems = [
+    { id: 'fin_ceo', keycode: '[M1]', label: 'CEO Financial Command Center' },
+    { id: 'fin_unit', keycode: '[M2]', label: 'CM1/CM2/CM3 Unit Explorer' },
+    { id: 'fin_reconcile', keycode: '[M3]', label: 'Omnichannel Reconciler' },
+    { id: 'fin_losses', keycode: '[M4]', label: 'Losses & Leakage Center' },
+    { id: 'fin_manual', keycode: '[M5]', label: 'Manual Sales, OPEX & Approval' },
+    { id: 'fin_cashflow', keycode: '[M6]', label: 'Cash Flow & Runway Analyzer' },
+  ];
+
   return (
     <div className="erp-app-shell">
       {/* 1. TOP GLOBAL HEADER BAR */}
@@ -568,7 +579,14 @@ export default function App() {
           </div>
           <div className="header-select-pill user-pill">
             <span className="pill-tag">ROLE:</span>
-            <span className="pill-val">Inventory & B2B Master (Full Access) ▼</span>
+            <select
+              className="pill-role-select"
+              value={erpRole}
+              onChange={(e) => setErpRole(e.target.value)}
+            >
+              <option value="ADMIN">Admin / Proprietor (Full Access)</option>
+              <option value="FINANCE_ANALYST">Finance Analyst (Maker Only)</option>
+            </select>
           </div>
         </div>
       </header>
@@ -622,6 +640,21 @@ export default function App() {
             ))}
           </nav>
 
+          {/* SECTION 3: FOUNDER FINANCIAL COMMAND (MODULE 9) */}
+          <div className="sidebar-section-heading finance-heading">FOUNDER FINANCIAL COMMAND</div>
+          <nav className="sidebar-nav-list">
+            {financeNavItems.map((item) => (
+              <button
+                key={item.id}
+                className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(item.id)}
+              >
+                <span className="nav-keycode">{item.keycode}</span>
+                <span className="nav-label">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
           {/* ASYNC RATE LIMIT STATUS WIDGET */}
           <div className="sidebar-channels-box">
             <div className="sidebar-channels-title">ASYNC RATE LIMIT STATUS</div>
@@ -648,7 +681,7 @@ export default function App() {
               DATE: <strong>{new Date().toLocaleDateString('en-GB')}</strong>
             </div>
             <div className="status-line engine-line">
-              PURASTONE CORE ENGINE: <strong>v2.1.0 (B2B Active)</strong>
+              PURASTONE CORE ENGINE: <strong>v2.1.0 (B2B + Fin)</strong>
             </div>
           </div>
         </aside>
@@ -665,12 +698,22 @@ export default function App() {
           {/* Module Banner Header */}
           <div className="erp-module-header">
             <span className="module-title-badge">
-              MODULE: {[...inventoryNavItems, ...wholesalerNavItems].find((n) => n.id === activeTab)?.label.toUpperCase()} &bull; CENTRAL FULFILLMENT
+              MODULE: {[...inventoryNavItems, ...wholesalerNavItems, ...financeNavItems].find((n) => n.id === activeTab)?.label.toUpperCase()} &bull; CENTRAL FULFILLMENT
             </span>
           </div>
 
           {/* Dynamic Tab Workspace */}
           <div className="erp-workspace-panel">
+            {activeTab.startsWith('fin_') && (
+              <FinanceCommandCenter
+                activeTab={activeTab}
+                apiBase={API_BASE}
+                erpRole={erpRole}
+                inventory={inventory}
+                notify={showNotice}
+                onRefreshInventory={fetchInventory}
+              />
+            )}
             {/* [F1] INVENTORY EXECUTIVE DASHBOARD */}
             {activeTab === 'inv_dashboard' && (
               <div className="panel-inner">

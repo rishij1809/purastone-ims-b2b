@@ -1,0 +1,43 @@
+from django.urls import path
+from .views import (
+    CommandCenterSummaryAPIView,
+    UnitEconomicsExplorerAPIView,
+    SettlementReconcilerAPIView,
+    LossesIntelligenceAPIView,
+    ManualRevenueListCreateAPIView,
+    MarketingOpexListCreateAPIView,
+    BulkCsvImportAPIView,
+    MakerCheckerDecisionAPIView,
+    FinancialAuditLogListAPIView,
+    WorkingCapitalRunwayAPIView,
+    ChannelSkuMappingListCreateAPIView,
+    LorryReceiptListCreateAPIView,
+    LorryReceiptVerifyPodAPIView,
+    MarketplaceWebhookAPIView,
+    RefreshMaterializedViewsAPIView,
+    ExportBoardroomPdfAPIView,
+    ExportCaExcelAPIView,
+    ExportCaCsvAPIView,
+)
+
+urlpatterns = [
+    path("command-center/", CommandCenterSummaryAPIView.as_view(), name="fin_command_center"),
+    path("unit-economics/", UnitEconomicsExplorerAPIView.as_view(), name="fin_unit_economics"),
+    path("reconciler/", SettlementReconcilerAPIView.as_view(), name="fin_reconciler"),
+    path("losses/", LossesIntelligenceAPIView.as_view(), name="fin_losses"),
+    path("manual-sales/", ManualRevenueListCreateAPIView.as_view(), name="fin_manual_sales"),
+    path("opex/", MarketingOpexListCreateAPIView.as_view(), name="fin_opex"),
+    path("import-csv/", BulkCsvImportAPIView.as_view(), name="fin_import_csv"),
+    path("approvals/<str:entity_type>/<uuid:entry_id>/", MakerCheckerDecisionAPIView.as_view(), name="fin_approval_decision"),
+    path("audit-logs/", FinancialAuditLogListAPIView.as_view(), name="fin_audit_logs"),
+    path("working-capital/", WorkingCapitalRunwayAPIView.as_view(), name="fin_working_capital"),
+    path("sku-mappings/", ChannelSkuMappingListCreateAPIView.as_view(), name="fin_sku_mappings"),
+    path("lorry-receipts/", LorryReceiptListCreateAPIView.as_view(), name="fin_lorry_receipts"),
+    path("lorry-receipts/<uuid:lr_id>/verify-pod/", LorryReceiptVerifyPodAPIView.as_view(), name="fin_lr_verify_pod"),
+    path("webhooks/<str:channel>/", MarketplaceWebhookAPIView.as_view(), name="fin_webhook_ingest"),
+    path("refresh-views/", RefreshMaterializedViewsAPIView.as_view(), name="fin_refresh_views"),
+    path("export/pdf/", ExportBoardroomPdfAPIView.as_view(), name="fin_export_pdf"),
+    path("export/xlsx/", ExportCaExcelAPIView.as_view(), name="fin_export_xlsx"),
+    path("export/csv/", ExportCaCsvAPIView.as_view(), name="fin_export_csv"),
+]
+

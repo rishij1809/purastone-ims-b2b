@@ -19,6 +19,7 @@ def serve_spa(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/index.py', serve_spa),
+    path('api/finance/', include('finance.urls')),
     path('api/', include('inventory.urls')),
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     re_path(r'^assets/(?P<path>.*)$', serve, {'document_root': os.path.join(DIST_DIR, 'assets')}),
