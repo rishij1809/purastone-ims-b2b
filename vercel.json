@@ -1,9 +1,31 @@
 {
   "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/index.py?__path__=api/$1"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/api/index.py?__path__=admin/$1"
+    },
+    {
+      "source": "/healthz(.*)",
+      "destination": "/api/index.py?__path__=healthz$1"
+    },
+    {
+      "source": "/readyz(.*)",
+      "destination": "/api/index.py?__path__=readyz$1"
+    },
+    {
+      "source": "/media/(.*)",
+      "destination": "/api/index.py?__path__=media/$1"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/api/index.py?__path__=$1"
+      "destination": "/index.html"
     }
   ]
 }

@@ -21,7 +21,13 @@ from .views import (
     BatchDetailAPIView,
     BatchQuarantineAPIView,
     FefoPreviewAPIView,
-    DispatchGatePassOuttakeAPIView
+    DispatchGatePassOuttakeAPIView,
+    PricingTierSlabListCreateAPIView,
+    PricingTierSlabDetailAPIView,
+    PromotionalCampaignListCreateAPIView,
+    PromotionalCampaignDetailAPIView,
+    QuotationCalculatorAPIView,
+    WholesalerPricingProfileAPIView
 )
 
 urlpatterns = [
@@ -44,11 +50,17 @@ urlpatterns = [
     # B2B Wholesaler Module Endpoints
     path('wholesale/parents/', WholesalerParentListCreateAPIView.as_view(), name='api_wholesale_parents'),
     path('wholesale/parents/<int:parent_id>/approve/', WholesalerApproveAPIView.as_view(), name='api_wholesale_approve'),
+    path('wholesale/parents/<int:pk>/pricing-profile/', WholesalerPricingProfileAPIView.as_view(), name='api_wholesale_parent_pricing_profile'),
     path('wholesale/children/', WholesalerChildListCreateAPIView.as_view(), name='api_wholesale_children'),
     path('wholesale/orders/', WholesaleOrderListCreateAPIView.as_view(), name='api_wholesale_orders'),
     path('wholesale/orders/<uuid:order_id>/', WholesaleOrderDetailAPIView.as_view(), name='api_wholesale_order_detail'),
     path('wholesale/orders/<uuid:order_id>/discount/', WholesaleOrderApplyDiscountAPIView.as_view(), name='api_wholesale_order_discount'),
     path('wholesale/orders/<uuid:order_id>/confirm/', WholesaleOrderConfirmAPIView.as_view(), name='api_wholesale_order_confirm'),
+    path('wholesale/pricing-slabs/', PricingTierSlabListCreateAPIView.as_view(), name='api_wholesale_pricing_slabs'),
+    path('wholesale/pricing-slabs/<int:pk>/', PricingTierSlabDetailAPIView.as_view(), name='api_wholesale_pricing_slab_detail'),
+    path('wholesale/campaigns/', PromotionalCampaignListCreateAPIView.as_view(), name='api_wholesale_campaigns'),
+    path('wholesale/campaigns/<str:campaign_code>/', PromotionalCampaignDetailAPIView.as_view(), name='api_wholesale_campaign_detail'),
+    path('wholesale/quotation-calculator/', QuotationCalculatorAPIView.as_view(), name='api_wholesale_quotation_calculator'),
     path('wholesale/analytics/', WholesaleAnalyticsAPIView.as_view(), name='api_wholesale_analytics_master'),
     path('wholesale/analytics/<int:parent_id>/', WholesaleAnalyticsAPIView.as_view(), name='api_wholesale_analytics_individual'),
     path('wholesale/invoices/', InvoiceListAPIView.as_view(), name='api_wholesale_invoices'),

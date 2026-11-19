@@ -1,13 +1,16 @@
+import math
+import re
 from datetime import date
 from decimal import Decimal
 from django.db import transaction
-from django.db.models import Sum, Q, Count
+from django.db.models import Sum, Q, Count, F
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 User = get_user_model()
 from .models import (
     Product, Batch, Location, InventoryLedger, TransactionLog, BundleMapping,
-    WholesalerParent, WholesalerChild, WholesaleOrder, WholesaleOrderItem, Invoice
+    WholesalerParent, WholesalerChild, WholesaleOrder, WholesaleOrderItem, Invoice,
+    WholesalerTier, DiscountMode, PricingTierSlab, PromotionalCampaign
 )
 from .exceptions import (
     InsufficientStockError, InvalidAdjustmentError, ProductNotFoundError, NegativeMarginError
@@ -614,24 +617,345 @@ class InventoryEngine:
         }
 
 
+class WholesalePricingEngine:
+    """
+    Dynamic Tiered Margin Matrix, Volume Slab Engine & Pre-Dispatch Profitability Simulator.
+    Calculates wholesale pricing structures across MRP, PTR, and PTS slabs,
+    evaluates formulation base costs (COGS), variable overheads (freight & packaging),
+    applies promotional campaigns & complimentary tester bundles, and strictly
+    enforces NegativeMarginError floor protection.
+    """
+
+    @staticmethod
+    def validate_gstin(gstin: str) -> bool:
+        if not gstin or not isinstance(gstin, str):
+            return False
+        pattern = r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$'
+        return bool(re.match(pattern, gstin.strip().upper()))
+
+    @classmethod
+    def resolve_pricing_slab(cls, product: Product, tier: str, cartons: int) -> tuple[object, Decimal, Decimal, Decimal | None]:
+        """
+        Resolves applicable PTR discount %, PTS discount %, or flat unit price override.
+        Checks product-specific slab first; falls back to global tier slab; falls back to default margins.
+        """
+        # 1. Product-specific slab
+        slab = PricingTierSlab.objects.filter(
+            product=product,
+            tier=tier,
+            is_active=True,
+            min_cartons__lte=cartons
+        ).filter(
+            Q(max_cartons__gte=cartons) | Q(max_cartons__isnull=True)
+        ).order_by('-min_cartons').first()
+
+        # 2. Global category/tier slab
+        if not slab:
+            slab = PricingTierSlab.objects.filter(
+                product__isnull=True,
+                tier=tier,
+                is_active=True,
+                min_cartons__lte=cartons
+            ).filter(
+                Q(max_cartons__gte=cartons) | Q(max_cartons__isnull=True)
+            ).order_by('-min_cartons').first()
+
+        if slab:
+            return slab, slab.ptr_discount_pct, slab.pts_discount_pct, slab.custom_unit_price
+
+        # 3. Default fallback margins by tier
+        tier_fallbacks = {
+            WholesalerTier.RETAILER: (Decimal('25.00'), Decimal('25.00'), None),
+            WholesalerTier.STOCKIST: (Decimal('25.00'), Decimal('35.00'), None),
+            WholesalerTier.SUPER_STOCKIST: (Decimal('25.00'), Decimal('42.00'), None),
+            WholesalerTier.INSTITUTIONAL: (Decimal('30.00'), Decimal('30.00'), None),
+        }
+        ptr_d, pts_d, flat_p = tier_fallbacks.get(tier, (Decimal('25.00'), Decimal('25.00'), None))
+        return None, ptr_d, pts_d, flat_p
+
+    @classmethod
+    def simulate_order_profitability(
+        cls,
+        items: list,
+        parent: WholesalerParent = None,
+        parent_id: int = None,
+        campaign_code: str = None,
+        estimated_freight: Decimal = Decimal('0.00'),
+        packaging_cost: Decimal = Decimal('0.00'),
+    ) -> dict:
+        """
+        Real-time simulation evaluating formulation base cost (COGS), variable overheads
+        (freight, packaging), volume-scaled dealer discounts, and promotional markdowns.
+        Returns Gross Margin, Net Realization, and Margin Yield %.
+        Strictly prevents quotations yielding negative margins below base_cost floor (NegativeMarginError).
+        """
+        if not items:
+            raise ValueError("Simulation requires at least one order item.")
+
+        if not parent and parent_id:
+            parent = WholesalerParent.objects.get(id=parent_id)
+
+        tier = parent.tier if parent else WholesalerTier.RETAILER
+        estimated_freight = Decimal(str(estimated_freight)).quantize(Decimal('0.01'))
+        packaging_cost = Decimal(str(packaging_cost)).quantize(Decimal('0.01'))
+
+        # Fetch and validate promotional campaign if specified
+        campaign = None
+        if campaign_code and str(campaign_code).strip():
+            try:
+                campaign = PromotionalCampaign.objects.prefetch_related('applicable_skus').get(
+                    campaign_code=str(campaign_code).strip()
+                )
+                if not campaign.is_currently_valid:
+                    raise ValueError(f"Promotional campaign '{campaign_code}' is inactive, expired, or over budget.")
+            except PromotionalCampaign.DoesNotExist:
+                raise ValueError(f"Promotional campaign '{campaign_code}' not found.")
+
+        simulated_items = []
+        subtotal = Decimal('0.00')
+        total_product_cogs = Decimal('0.00')
+        total_gst = Decimal('0.00')
+        total_units = 0
+        total_cartons = 0
+
+        # Pass 1: Line item calculation
+        for item in items:
+            sku = item['sku']
+            qty = int(item['quantity'])
+            if qty <= 0:
+                raise ValueError(f"Quantity for SKU '{sku}' must be greater than zero.")
+
+            try:
+                product = Product.objects.get(sku=sku)
+            except Product.DoesNotExist:
+                raise ProductNotFoundError(f"Product '{sku}' not found.")
+
+            mrp = product.base_price
+            base_cost = product.base_cost
+            carton_size = max(1, product.master_carton_qty)
+            cartons = math.ceil(qty / carton_size)
+
+            # Resolve volume slab
+            slab, ptr_pct, pts_pct, flat_override = cls.resolve_pricing_slab(product, tier, cartons)
+
+            if 'unit_price' in item and item['unit_price'] is not None and str(item['unit_price']).strip() != '':
+                unit_price = Decimal(str(item['unit_price'])).quantize(Decimal('0.01'))
+                applied_discount_pct = (
+                    ((mrp - unit_price) / mrp * Decimal('100.00')).quantize(Decimal('0.01'))
+                    if mrp > Decimal('0.00') else Decimal('0.00')
+                )
+            elif flat_override is not None:
+                unit_price = flat_override.quantize(Decimal('0.01'))
+                applied_discount_pct = (
+                    ((mrp - unit_price) / mrp * Decimal('100.00')).quantize(Decimal('0.01'))
+                    if mrp > Decimal('0.00') else Decimal('0.00')
+                )
+            elif slab is not None:
+                applied_discount_pct = ptr_pct if tier == WholesalerTier.RETAILER else pts_pct
+                unit_price = (mrp * (Decimal('100.00') - applied_discount_pct) / Decimal('100.00')).quantize(Decimal('0.01'))
+            elif product.default_b2b_price > Decimal('0.00'):
+                # When no volume slab is explicitly configured, use product's default B2B base price
+                if tier in [WholesalerTier.STOCKIST, WholesalerTier.SUPER_STOCKIST]:
+                    applied_discount_pct = pts_pct
+                    unit_price = (mrp * (Decimal('100.00') - applied_discount_pct) / Decimal('100.00')).quantize(Decimal('0.01'))
+                else:
+                    unit_price = product.default_b2b_price
+                    applied_discount_pct = (
+                        ((mrp - unit_price) / mrp * Decimal('100.00')).quantize(Decimal('0.01'))
+                        if mrp > Decimal('0.00') else Decimal('0.00')
+                    )
+            else:
+                applied_discount_pct = ptr_pct if tier == WholesalerTier.RETAILER else pts_pct
+                unit_price = (mrp * (Decimal('100.00') - applied_discount_pct) / Decimal('100.00')).quantize(Decimal('0.01'))
+
+            # GST rate
+            if 'gst_percentage' in item and item['gst_percentage'] is not None and str(item['gst_percentage']).strip() != '':
+                gst_pct = Decimal(str(item['gst_percentage'])).quantize(Decimal('0.01'))
+            elif 'gst_rate' in item and item['gst_rate'] is not None and str(item['gst_rate']).strip() != '':
+                gst_pct = Decimal(str(item['gst_rate'])).quantize(Decimal('0.01'))
+            else:
+                gst_pct = Decimal('18.00')
+
+            line_gross = (unit_price * Decimal(qty)).quantize(Decimal('0.01'))
+            line_gst = (line_gross * (gst_pct / Decimal('100.00'))).quantize(Decimal('0.01'))
+            line_total = line_gross + line_gst
+            line_cogs = (base_cost * Decimal(qty)).quantize(Decimal('0.01'))
+
+            simulated_items.append({
+                'sku': product.sku,
+                'name': product.name,
+                'quantity': qty,
+                'cartons': cartons,
+                'mrp_unit': str(mrp),
+                'unit_price': str(unit_price),
+                'base_cost_unit': str(base_cost),
+                'applied_discount_pct': str(applied_discount_pct),
+                'gst_percentage': str(gst_pct),
+                'line_gross': str(line_gross),
+                'line_gst': str(line_gst),
+                'line_total': str(line_total),
+                'line_cogs': str(line_cogs),
+                'product_obj': product,
+                '_raw_line_gross': line_gross,
+                '_raw_line_cogs': line_cogs,
+                '_raw_line_gst': line_gst,
+            })
+
+            subtotal += line_gross
+            total_product_cogs += line_cogs
+            total_gst += line_gst
+            total_units += qty
+            total_cartons += cartons
+
+        # Pass 2: Promotional campaign application
+        applied_promo_discount = Decimal('0.00')
+        tester_bundle_info = {}
+        tester_cogs = Decimal('0.00')
+
+        if campaign:
+            applicable_skus = set(campaign.applicable_skus.values_list('sku', flat=True))
+            if applicable_skus:
+                eligible_subtotal = sum(
+                    item['_raw_line_gross'] for item in simulated_items if item['sku'] in applicable_skus
+                )
+            else:
+                eligible_subtotal = subtotal
+
+            if campaign.discount_pct > Decimal('0.00'):
+                applied_promo_discount += (eligible_subtotal * (campaign.discount_pct / Decimal('100.00'))).quantize(Decimal('0.01'))
+
+            if campaign.flat_discount_amount > Decimal('0.00'):
+                applied_promo_discount += campaign.flat_discount_amount.quantize(Decimal('0.01'))
+
+            # Check remaining campaign budget
+            if campaign.allocated_budget > Decimal('0.00'):
+                remaining_budget = max(Decimal('0.00'), campaign.allocated_budget - campaign.consumed_discount_total)
+                applied_promo_discount = min(applied_promo_discount, remaining_budget)
+
+            # Complimentary tester allocation (does not distort commercial invoice, but accounted in formulation COGS)
+            if campaign.complimentary_tester_sku and campaign.tester_quantity_per_order > 0:
+                tester_sku = campaign.complimentary_tester_sku
+                tester_qty = campaign.tester_quantity_per_order
+                tester_cogs = (tester_sku.base_cost * Decimal(tester_qty)).quantize(Decimal('0.01'))
+                tester_bundle_info = {
+                    'sku': tester_sku.sku,
+                    'name': tester_sku.name,
+                    'quantity': tester_qty,
+                    'unit_cogs': str(tester_sku.base_cost),
+                    'total_tester_cogs': str(tester_cogs),
+                    'charge_to_customer': '0.00'
+                }
+
+        final_value = (subtotal - applied_promo_discount).quantize(Decimal('0.01'))
+        grand_total = (final_value + total_gst).quantize(Decimal('0.01'))
+        total_order_cogs = (total_product_cogs + tester_cogs).quantize(Decimal('0.01'))
+        variable_overheads = (estimated_freight + packaging_cost).quantize(Decimal('0.01'))
+        net_realization = (final_value - variable_overheads).quantize(Decimal('0.01'))
+        gross_margin = (final_value - total_order_cogs).quantize(Decimal('0.01'))
+        gross_margin_pct = (
+            ((gross_margin / final_value) * Decimal('100.00')).quantize(Decimal('0.02'))
+            if final_value > Decimal('0.00') else Decimal('0.00')
+        )
+        net_profit = (net_realization - total_order_cogs).quantize(Decimal('0.01'))
+        net_margin_yield_pct = (
+            ((net_profit / final_value) * Decimal('100.00')).quantize(Decimal('0.02'))
+            if final_value > Decimal('0.00') else Decimal('0.00')
+        )
+
+        # STRICT PRICE FLOOR PROTECTION: Prevent negative margin yield
+        if final_value < total_order_cogs or net_realization < total_order_cogs or net_profit < Decimal('0.00'):
+            max_allowable_discount = max(Decimal('0.00'), subtotal - total_order_cogs - variable_overheads)
+            raise NegativeMarginError(
+                f"Quotation yields negative margin (Net Profit: -₹{abs(net_profit):.2f}, Yield: {net_margin_yield_pct}%). "
+                f"Net realization ₹{net_realization:.2f} is below total formulation COGS floor ₹{total_order_cogs:.2f}. "
+                f"Maximum allowable promotional/trade discount is ₹{max_allowable_discount:.2f}."
+            )
+
+        # Clean private helper keys before returning
+        for item in simulated_items:
+            item.pop('product_obj', None)
+            item.pop('_raw_line_gross', None)
+            item.pop('_raw_line_cogs', None)
+            item.pop('_raw_line_gst', None)
+
+        return {
+            'status': 'APPROVED_PROFITABLE',
+            'tier': tier,
+            'total_units': total_units,
+            'total_cartons': total_cartons,
+            'items': simulated_items,
+            'subtotal': str(subtotal),
+            'promotional_discount': str(applied_promo_discount),
+            'final_value': str(final_value),
+            'total_gst': str(total_gst),
+            'grand_total': str(grand_total),
+            'total_cogs': str(total_order_cogs),
+            'product_cogs': str(total_product_cogs),
+            'tester_cogs': str(tester_cogs),
+            'estimated_freight': str(estimated_freight),
+            'packaging_cost': str(packaging_cost),
+            'variable_overheads': str(variable_overheads),
+            'net_realization': str(net_realization),
+            'gross_margin': str(gross_margin),
+            'gross_margin_pct': str(gross_margin_pct),
+            'net_profit': str(net_profit),
+            'net_margin_yield_pct': str(net_margin_yield_pct),
+            'campaign_applied': campaign.campaign_code if campaign else None,
+            'tester_bundle': tester_bundle_info if tester_bundle_info else None,
+        }
+
+
 class WholesalerService:
     """
     Dedicated domain service managing B2B Wholesaler onboarding,
-    immutable order costing, custom discount margin guards, FEFO fulfillment,
+    tier profiles, volume pricing, pre-dispatch simulation, FEFO fulfillment,
     and yield analytics.
     """
 
     @classmethod
-    def onboard_parent(cls, name: str, gstin: str, master_email: str) -> WholesalerParent:
-        if WholesalerParent.objects.filter(gstin=gstin).exists():
-            raise ValueError(f"A wholesaler with GSTIN '{gstin}' is already registered.")
-        if WholesalerParent.objects.filter(master_email=master_email).exists():
+    def onboard_parent(
+        cls,
+        name: str,
+        gstin: str,
+        master_email: str,
+        tier: str = WholesalerTier.RETAILER,
+        trade_license_number: str = None,
+        cosmetic_license_number: str = None,
+        billing_address: str = None,
+        shipping_address: str = None,
+        city: str = None,
+        state: str = None,
+        pincode: str = None,
+        assigned_credit_limit: Decimal = Decimal('0.00'),
+        credit_period_days: int = 30,
+        discount_mode: str = DiscountMode.PERCENTAGE,
+        show_discount_on_invoice: bool = True
+    ) -> WholesalerParent:
+        gstin_clean = gstin.strip().upper()
+        if not WholesalePricingEngine.validate_gstin(gstin_clean):
+            raise ValueError(f"Invalid Indian GSTIN '{gstin_clean}'. Must be exactly 15 characters matching statutory GSTIN format.")
+
+        if WholesalerParent.objects.filter(gstin=gstin_clean).exists():
+            raise ValueError(f"A wholesaler with GSTIN '{gstin_clean}' is already registered.")
+        if WholesalerParent.objects.filter(master_email=master_email.strip().lower()).exists():
             raise ValueError(f"Master email '{master_email}' is already registered.")
         
         return WholesalerParent.objects.create(
             name=name.strip(),
-            gstin=gstin.strip().upper(),
+            tier=tier,
+            trade_license_number=trade_license_number.strip() if trade_license_number else None,
+            cosmetic_license_number=cosmetic_license_number.strip() if cosmetic_license_number else None,
+            gstin=gstin_clean,
             master_email=master_email.strip().lower(),
+            billing_address=billing_address.strip() if billing_address else None,
+            shipping_address=shipping_address.strip() if shipping_address else None,
+            city=city.strip() if city else None,
+            state=state.strip() if state else None,
+            pincode=pincode.strip() if pincode else None,
+            assigned_credit_limit=Decimal(str(assigned_credit_limit)),
+            credit_period_days=int(credit_period_days),
+            discount_mode=discount_mode,
+            show_discount_on_invoice=show_discount_on_invoice,
             status='PENDING'
         )
 
@@ -685,11 +1009,14 @@ class WholesalerService:
         child_id: int,
         items: list,
         po_number: str = None,
-        notes: str = None
+        notes: str = None,
+        campaign_code: str = None,
+        estimated_freight: Decimal = Decimal('0.00'),
+        packaging_cost: Decimal = Decimal('0.00')
     ) -> WholesaleOrder:
         """
-        Creates a draft wholesale order, locking in base_cost and unit price (or default_b2b_price)
-        immutably from the Product catalog / manual entry at the time of order intake, with GST.
+        Creates a draft wholesale order, evaluating tiered volume slabs, promotional markdowns,
+        and tester bundle allocations via WholesalePricingEngine with strict NegativeMarginError guards.
         """
         if not items:
             raise ValueError("Wholesale order must contain at least one item.")
@@ -697,6 +1024,15 @@ class WholesalerService:
         child = WholesalerChild.objects.select_related('parent').get(id=child_id)
         if child.parent.status != 'APPROVED':
             raise ValueError("Wholesaler account is pending approval.")
+
+        # Run pre-dispatch profitability simulation and price floor protection
+        simulation = WholesalePricingEngine.simulate_order_profitability(
+            items=items,
+            parent=child.parent,
+            campaign_code=campaign_code,
+            estimated_freight=estimated_freight,
+            packaging_cost=packaging_cost
+        )
 
         # Auto-generate PO Number if not provided
         if not po_number or not str(po_number).strip():
@@ -707,68 +1043,52 @@ class WholesalerService:
         else:
             po_number = po_number.strip()
 
+        campaign_obj = None
+        if campaign_code and str(campaign_code).strip():
+            campaign_obj = PromotionalCampaign.objects.filter(campaign_code=str(campaign_code).strip()).first()
+
         order = WholesaleOrder.objects.create(
             parent_wholesaler=child.parent,
             child_wholesaler=child,
+            campaign=campaign_obj,
             po_number=po_number,
             notes=notes.strip() if notes else None,
-            status='DRAFT'
+            status='DRAFT',
+            subtotal=Decimal(simulation['subtotal']),
+            discount_amount=Decimal(simulation['promotional_discount']),
+            final_value=Decimal(simulation['final_value']),
+            total_gst=Decimal(simulation['total_gst']),
+            grand_total=Decimal(simulation['grand_total']),
+            total_cogs=Decimal(simulation['total_cogs']),
+            estimated_freight=Decimal(simulation['estimated_freight']),
+            packaging_cost=Decimal(simulation['packaging_cost']),
+            gross_margin=Decimal(simulation['gross_margin']),
+            net_profit=Decimal(simulation['net_profit']),
+            net_margin_yield_pct=Decimal(simulation['net_margin_yield_pct']),
+            tester_bundle_info=simulation.get('tester_bundle') or {}
         )
 
-        subtotal = Decimal('0.00')
-        total_gst = Decimal('0.00')
-        total_cogs = Decimal('0.00')
-
-        for item_data in items:
-            sku = item_data['sku']
-            qty = int(item_data['quantity'])
-            if qty <= 0:
-                raise ValueError("Item quantity must be greater than zero.")
-
-            product = Product.objects.get(sku=sku)
-            locked_cost = product.base_cost
-
-            # If manual unit_price is provided, lock that in; else use default_b2b_price
-            if 'unit_price' in item_data and item_data['unit_price'] is not None and str(item_data['unit_price']).strip() != '':
-                locked_price = Decimal(str(item_data['unit_price'])).quantize(Decimal('0.01'))
-            else:
-                locked_price = product.default_b2b_price
-
-            # If manual gst_percentage is provided, lock that in; else default to 18%
-            if 'gst_percentage' in item_data and item_data['gst_percentage'] is not None and str(item_data['gst_percentage']).strip() != '':
-                gst_pct = Decimal(str(item_data['gst_percentage'])).quantize(Decimal('0.01'))
-            elif 'gst_rate' in item_data and item_data['gst_rate'] is not None and str(item_data['gst_rate']).strip() != '':
-                gst_pct = Decimal(str(item_data['gst_rate'])).quantize(Decimal('0.01'))
-            else:
-                gst_pct = Decimal('18.00')
-
-            line_net = locked_price * Decimal(qty)
-            line_gst = (line_net * (gst_pct / Decimal('100.0'))).quantize(Decimal('0.01'))
-            line_total = line_net + line_gst
-
+        # Create line items with locked historical costs & slab discounts
+        for item_sim in simulation['items']:
+            product = Product.objects.get(sku=item_sim['sku'])
             WholesaleOrderItem.objects.create(
                 order=order,
                 product=product,
-                quantity=qty,
-                locked_base_cost=locked_cost,
-                locked_b2b_price=locked_price,
-                gst_percentage=gst_pct,
-                gst_amount=line_gst,
-                line_total=line_total
+                quantity=item_sim['quantity'],
+                mrp_unit=Decimal(item_sim['mrp_unit']),
+                slab_discount_pct=Decimal(item_sim['applied_discount_pct']),
+                promotional_discount_amount=Decimal('0.00'),
+                locked_base_cost=Decimal(item_sim['base_cost_unit']),
+                locked_b2b_price=Decimal(item_sim['unit_price']),
+                gst_percentage=Decimal(item_sim['gst_percentage']),
+                gst_amount=Decimal(item_sim['line_gst']),
+                line_total=Decimal(item_sim['line_total'])
             )
 
-            subtotal += line_net
-            total_gst += line_gst
-            total_cogs += locked_cost * Decimal(qty)
-
-        order.subtotal = subtotal
-        order.total_gst = total_gst
-        order.total_cogs = total_cogs
-        order.discount_amount = Decimal('0.00')
-        order.final_value = subtotal
-        order.grand_total = subtotal + total_gst
-        order.net_profit = subtotal - total_cogs
-        order.save()
+        # Record consumed discount against campaign budget
+        if campaign_obj and Decimal(simulation['promotional_discount']) > Decimal('0.00'):
+            campaign_obj.consumed_discount_total += Decimal(simulation['promotional_discount'])
+            campaign_obj.save(update_fields=['consumed_discount_total'])
 
         return order
 
@@ -808,7 +1128,13 @@ class WholesalerService:
         order.discount_amount = discount_amount
         order.final_value = candidate_final_value
         order.grand_total = candidate_final_value + order.total_gst
-        order.net_profit = candidate_final_value - order.total_cogs
+        variable_overheads = order.estimated_freight + order.packaging_cost
+        order.gross_margin = candidate_final_value - order.total_cogs
+        order.net_profit = candidate_final_value - variable_overheads - order.total_cogs
+        order.net_margin_yield_pct = (
+            ((order.net_profit / candidate_final_value) * Decimal('100.00')).quantize(Decimal('0.02'))
+            if candidate_final_value > Decimal('0.00') else Decimal('0.00')
+        )
         order.status = 'DISCOUNT_APPLIED'
         order.save()
 

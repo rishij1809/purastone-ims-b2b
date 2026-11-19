@@ -153,6 +153,14 @@ class AuditLog(models.Model):
         # Enforce immutability: deletion of audit logs is forbidden
         raise PermissionDenied("AuditLog records are immutable and cannot be deleted from the database.")
 
+    @property
+    def pre_snapshot(self):
+        return self.pre_change_snapshot
+
+    @property
+    def post_snapshot(self):
+        return self.post_change_snapshot
+
     @classmethod
     def record_action(
         cls,

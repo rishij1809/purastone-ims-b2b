@@ -3,8 +3,10 @@ from django.utils import timezone
 from rest_framework import serializers
 from .models import (
     Product, BundleMapping, Batch, Location, InventoryLedger, TransactionLog,
-    WholesalerParent, WholesalerChild, WholesaleOrder, WholesaleOrderItem, Invoice
+    WholesalerParent, WholesalerChild, WholesaleOrder, WholesaleOrderItem, Invoice,
+    WholesalerTier, DiscountMode, PricingTierSlab, PromotionalCampaign
 )
+from .services import WholesalePricingEngine
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -272,3 +274,102 @@ class DispatchGatePassSerializer(serializers.Serializer):
     gate_pass_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
     lr_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
     items = DispatchGatePassItemSerializer(many=True)
+
+
+# ==========================================
+# PHASE 3 WHOLESALE & PRICING SERIALIZERS
+# ==========================================
+
+class WholesalerProfileSerializer(serializers.ModelSerializer):
+    tier_display = serializers.CharField(source='get_tier_display', read_only=True)
+    discount_mode_display = serializers.CharField(source='get_discount_mode_display', read_only=True)
+    total_orders_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WholesalerParent
+        fields = [
+            'id', 'name', 'tier', 'tier_display',
+            'trade_license_number', 'cosmetic_license_number',
+            'gstin', 'master_email',
+            'billing_address', 'shipping_address', 'city', 'state', 'pincode',
+            'assigned_credit_limit', 'credit_period_days',
+            'discount_mode', 'discount_mode_display', 'show_discount_on_invoice',
+            'status', 'created_at', 'total_orders_count'
+        ]
+
+    def get_total_orders_count(self, obj) -> int:
+        return WholesaleOrder.objects.filter(parent_wholesaler=obj).count()
+
+    def validate_gstin(self, value):
+        val = value.strip().upper()
+        if not WholesalePricingEngine.validate_gstin(val):
+            raise serializers.ValidationError(
+                f"Invalid Indian GSTIN '{val}'. Must be exactly 15 characters conforming to statutory GSTIN regex format."
+            )
+        return val
+
+
+class PricingTierSlabSerializer(serializers.ModelSerializer):
+    tier_display = serializers.CharField(source='get_tier_display', read_only=True)
+    product_sku = serializers.CharField(source='product.sku', read_only=True, allow_null=True)
+    product_name = serializers.CharField(source='product.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = PricingTierSlab
+        fields = [
+            'id', 'product', 'product_sku', 'product_name',
+            'tier', 'tier_display',
+            'min_cartons', 'max_cartons',
+            'ptr_discount_pct', 'pts_discount_pct', 'custom_unit_price',
+            'is_active', 'created_at', 'updated_at'
+        ]
+
+    def validate(self, attrs):
+        min_c = attrs.get('min_cartons') or getattr(self.instance, 'min_cartons', 1)
+        max_c = attrs.get('max_cartons') if 'max_cartons' in attrs else getattr(self.instance, 'max_cartons', None)
+        if max_c is not None and max_c < min_c:
+            raise serializers.ValidationError("max_cartons must be greater than or equal to min_cartons.")
+        return attrs
+
+
+class PromotionalCampaignSerializer(serializers.ModelSerializer):
+    is_currently_valid = serializers.BooleanField(read_only=True)
+    complimentary_tester_sku_code = serializers.CharField(source='complimentary_tester_sku.sku', read_only=True, allow_null=True)
+    complimentary_tester_sku_name = serializers.CharField(source='complimentary_tester_sku.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = PromotionalCampaign
+        fields = [
+            'id', 'campaign_code', 'name', 'description',
+            'start_date', 'end_date',
+            'discount_pct', 'flat_discount_amount',
+            'is_active', 'is_currently_valid',
+            'allocated_budget', 'consumed_discount_total',
+            'applicable_skus',
+            'complimentary_tester_sku', 'complimentary_tester_sku_code', 'complimentary_tester_sku_name',
+            'tester_quantity_per_order',
+            'created_at', 'updated_at'
+        ]
+
+    def validate(self, attrs):
+        start = attrs.get('start_date') or getattr(self.instance, 'start_date', None)
+        end = attrs.get('end_date') or getattr(self.instance, 'end_date', None)
+        if start and end and end < start:
+            raise serializers.ValidationError("end_date must be on or after start_date.")
+        return attrs
+
+
+class ProfitabilitySimulationItemInputSerializer(serializers.Serializer):
+    sku = serializers.CharField(max_length=100)
+    quantity = serializers.IntegerField(min_value=1)
+    unit_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
+    gst_percentage = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
+
+
+class ProfitabilitySimulationRequestSerializer(serializers.Serializer):
+    parent_id = serializers.IntegerField(required=False, allow_null=True)
+    campaign_code = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
+    estimated_freight = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0.00)
+    packaging_cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0.00)
+    items = ProfitabilitySimulationItemInputSerializer(many=True)
+

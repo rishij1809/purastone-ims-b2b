@@ -1,8 +1,10 @@
 from decimal import Decimal
 from datetime import date
+import re
+import uuid
 from django.db import models
 from django.conf import settings
-import uuid
+from django.core.exceptions import ValidationError
 
 # ==========================================
 # 1. CORE INVENTORY & PRODUCT MODELS
@@ -238,13 +240,69 @@ class TransactionLog(models.Model):
         return f"{self.timestamp} | {self.transaction_type} {self.quantity_change} {self.product.sku} ({self.source})"
 
 # ==========================================
-# 2. WHOLESALER MANAGEMENT MODELS
+# 2. WHOLESALER MANAGEMENT & ADVANCED PRICING
 # ==========================================
+
+class WholesalerTier(models.TextChoices):
+    RETAILER = 'RETAILER', 'Retailer'
+    STOCKIST = 'STOCKIST', 'Stockist'
+    SUPER_STOCKIST = 'SUPER_STOCKIST', 'Super Stockist'
+    INSTITUTIONAL = 'INSTITUTIONAL', 'Institutional / Salon'
+
+
+class DiscountMode(models.TextChoices):
+    PERCENTAGE = 'PERCENTAGE', 'Percentage Discount'
+    FLAT_AMOUNT = 'FLAT_AMOUNT', 'Flat Amount Discount'
+
 
 class WholesalerParent(models.Model):
     name = models.CharField(max_length=255)
-    gstin = models.CharField(max_length=50, unique=True)
+    tier = models.CharField(
+        max_length=30,
+        choices=WholesalerTier.choices,
+        default=WholesalerTier.RETAILER,
+        db_index=True,
+        help_text="Wholesale tier determining base PTR/PTS margin matrix"
+    )
+    trade_license_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Trade / Shop & Establishment License"
+    )
+    cosmetic_license_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="State FDA / CDSCO Cosmetic Wholesale License (Form 20B/21B)"
+    )
+    gstin = models.CharField(max_length=50, unique=True, help_text="15-character Indian GSTIN")
     master_email = models.EmailField(unique=True)
+    billing_address = models.TextField(blank=True, null=True)
+    shipping_address = models.TextField(blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    pincode = models.CharField(max_length=20, blank=True, null=True)
+    assigned_credit_limit = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Assigned maximum outstanding credit limit in INR"
+    )
+    credit_period_days = models.PositiveIntegerField(
+        default=30,
+        help_text="Credit repayment grace period in days"
+    )
+    discount_mode = models.CharField(
+        max_length=20,
+        choices=DiscountMode.choices,
+        default=DiscountMode.PERCENTAGE,
+        help_text="Default discount calculation preference"
+    )
+    show_discount_on_invoice = models.BooleanField(
+        default=True,
+        help_text="Whether to itemize trade and promotional discounts on invoice PDF"
+    )
     status = models.CharField(
         max_length=20,
         choices=[('PENDING', 'Pending Approval'), ('APPROVED', 'Approved')],
@@ -252,8 +310,134 @@ class WholesalerParent(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def company_name(self) -> str:
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if self.gstin:
+            cleaned_gstin = self.gstin.strip().upper()
+            self.gstin = cleaned_gstin
+            gstin_regex = r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$'
+            if not re.match(gstin_regex, cleaned_gstin):
+                raise ValidationError({
+                    'gstin': f"Invalid Indian GSTIN '{cleaned_gstin}'. Must be exactly 15 characters matching statutory GSTIN format."
+                })
+
     def __str__(self):
-        return f"{self.name} ({self.gstin}) [{self.status}]"
+        return f"{self.name} ({self.gstin}) [{self.tier} - {self.status}]"
+
+
+class PricingTierSlab(models.Model):
+    """
+    Dynamic Tiered Margin Matrix & Volume-Based Slabs.
+    Calculates wholesale pricing structures across MRP, PTR, and PTS slabs.
+    """
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='pricing_slabs',
+        help_text="Target mineral skincare SKU, or null for global tier slab"
+    )
+    tier = models.CharField(
+        max_length=30,
+        choices=WholesalerTier.choices,
+        default=WholesalerTier.RETAILER,
+        db_index=True
+    )
+    min_cartons = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum master cartons to qualify for this volume slab"
+    )
+    max_cartons = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum master cartons (null for open-ended 21+ cartons)"
+    )
+    ptr_discount_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('25.00'),
+        help_text="Price to Retailer (PTR) discount % off MRP"
+    )
+    pts_discount_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('40.00'),
+        help_text="Price to Stockist (PTS) discount % off MRP"
+    )
+    custom_unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Flat unit price override if applicable (bypasses percentage discount)"
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['tier', 'min_cartons']
+
+    def __str__(self):
+        sku_str = self.product.sku if self.product else "ALL SKUs"
+        max_str = f"-{self.max_cartons}" if self.max_cartons else "+"
+        return f"{self.tier} [{sku_str}] ({self.min_cartons}{max_str} cartons) -> PTR: {self.ptr_discount_pct}%, PTS: {self.pts_discount_pct}%"
+
+
+class PromotionalCampaign(models.Model):
+    """
+    Configurable promotional rule engine for time-bound festive/seasonal campaigns
+    (Diwali, New Year, Black Friday) and complimentary tester bundle allocations.
+    """
+    campaign_code = models.CharField(max_length=50, unique=True, db_index=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    start_date = models.DateField(db_index=True)
+    end_date = models.DateField(db_index=True)
+    discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    flat_discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    is_active = models.BooleanField(default=True, db_index=True)
+    allocated_budget = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    consumed_discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    applicable_skus = models.ManyToManyField(Product, blank=True, related_name='campaigns')
+    complimentary_tester_sku = models.ForeignKey(
+        Product,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tester_campaigns',
+        help_text="Complimentary tester SKU bundled for sampling / PR"
+    )
+    tester_quantity_per_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Units of complimentary tester product allocated per qualifying order"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-start_date']
+
+    def __str__(self):
+        status = "ACTIVE" if self.is_currently_valid else "EXPIRED/INACTIVE"
+        return f"{self.campaign_code} - {self.name} [{status}]"
+
+    @property
+    def is_currently_valid(self) -> bool:
+        today = date.today()
+        if not self.is_active:
+            return False
+        if not (self.start_date <= today <= self.end_date):
+            return False
+        if self.allocated_budget > Decimal('0.00') and self.consumed_discount_total >= self.allocated_budget:
+            return False
+        return True
+
 
 class WholesalerChild(models.Model):
     parent = models.ForeignKey(WholesalerParent, on_delete=models.CASCADE, related_name='branches')
@@ -266,10 +450,12 @@ class WholesalerChild(models.Model):
     def __str__(self):
         return f"{self.branch_name} ({self.store_id}) -> Parent: {self.parent.name}"
 
+
 class WholesaleOrder(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     parent_wholesaler = models.ForeignKey(WholesalerParent, on_delete=models.PROTECT, related_name='all_orders')
     child_wholesaler = models.ForeignKey(WholesalerChild, on_delete=models.PROTECT, related_name='orders')
+    campaign = models.ForeignKey(PromotionalCampaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     status = models.CharField(
         max_length=30,
         choices=[
@@ -281,14 +467,19 @@ class WholesaleOrder(models.Model):
         default='DRAFT'
     )
     
-    # Financial Ledgers
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    final_value = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    total_gst = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    total_cogs = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    net_profit = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    # Financial Ledgers & Profitability
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    final_value = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_gst = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_cogs = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    estimated_freight = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    packaging_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    gross_margin = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    net_profit = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    net_margin_yield_pct = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal('0.00'))
+    tester_bundle_info = models.JSONField(default=dict, blank=True)
     po_number = models.CharField(max_length=100, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     
@@ -298,20 +489,25 @@ class WholesaleOrder(models.Model):
     def __str__(self):
         return f"WholesaleOrder {self.id} | {self.child_wholesaler.branch_name} | {self.status} | Final: ₹{self.final_value}"
 
+
 class WholesaleOrderItem(models.Model):
     order = models.ForeignKey(WholesaleOrder, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
     quantity = models.PositiveIntegerField()
     
-    # Immutable cost/price fields to protect historical data
+    # Immutable pricing, volume slab & cost fields
+    mrp_unit = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    slab_discount_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    promotional_discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     locked_base_cost = models.DecimalField(max_digits=10, decimal_places=2)
     locked_b2b_price = models.DecimalField(max_digits=10, decimal_places=2)
-    gst_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=18.00)
-    gst_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    gst_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('18.00'))
+    gst_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
 
     def __str__(self):
         return f"{self.product.sku} x {self.quantity} (B2B Price: {self.locked_b2b_price}, Cost: {self.locked_base_cost})"
+
 
 class Invoice(models.Model):
     order = models.OneToOneField(WholesaleOrder, on_delete=models.CASCADE, related_name='invoice')

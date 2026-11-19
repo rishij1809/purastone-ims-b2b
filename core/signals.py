@@ -137,13 +137,14 @@ def audit_wholesaler_post_save(sender, instance, created, **kwargs):
     )
 
     if credit_changed:
+        company_name = getattr(instance, 'company_name', getattr(instance, 'name', ''))
         AuditService.log(
             action=AuditAction.CREDIT_LIMIT_CHANGE,
             entity_type='WholesalerParent',
             entity_id=str(instance.pk),
             pre_snapshot=pre,
             post_snapshot=post_snapshot,
-            metadata={'company_name': instance.company_name, 'gstin': instance.gstin}
+            metadata={'company_name': company_name, 'gstin': instance.gstin}
         )
 
 

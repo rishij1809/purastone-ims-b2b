@@ -1,11 +1,12 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 from .models import (
     Product, Batch, Location, InventoryLedger, TransactionLog, WholesalerParent, WholesalerChild,
-    WholesaleOrder, Invoice
+    WholesaleOrder, Invoice, PricingTierSlab, PromotionalCampaign
 )
-from .services import InventoryEngine, WholesalerService
+from .services import InventoryEngine, WholesalerService, WholesalePricingEngine
 from .exceptions import (
     InsufficientStockError, InvalidAdjustmentError, ProductNotFoundError, NegativeMarginError
 )
@@ -27,7 +28,11 @@ from .serializers import (
     BatchCreateSerializer,
     BatchQuarantineSerializer,
     FefoSimulationSerializer,
-    DispatchGatePassSerializer
+    DispatchGatePassSerializer,
+    WholesalerProfileSerializer,
+    PricingTierSlabSerializer,
+    PromotionalCampaignSerializer,
+    ProfitabilitySimulationRequestSerializer
 )
 
 
@@ -467,3 +472,141 @@ class DispatchGatePassOuttakeAPIView(APIView):
             return Response(manifest, status=status.HTTP_200_OK)
         except (InsufficientStockError, ProductNotFoundError, ValueError) as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ==========================================
+# PHASE 3: ADVANCED PRICING & QUOTATION VIEWS
+# ==========================================
+
+class PricingTierSlabListCreateAPIView(APIView):
+    """
+    List active wholesale volume slabs or configure new tier/volume rules.
+    """
+    def get(self, request):
+        qs = PricingTierSlab.objects.all().select_related('product')
+        tier = request.query_params.get('tier')
+        sku = request.query_params.get('sku')
+        if tier:
+            qs = qs.filter(tier=tier)
+        if sku:
+            qs = qs.filter(product__sku=sku)
+        serializer = PricingTierSlabSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = PricingTierSlabSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        slab = serializer.save()
+        return Response(PricingTierSlabSerializer(slab).data, status=status.HTTP_201_CREATED)
+
+
+class PricingTierSlabDetailAPIView(APIView):
+    """
+    Retrieve, update or deactivate a wholesale volume slab.
+    """
+    def get(self, request, pk):
+        slab = get_object_or_404(PricingTierSlab.objects.select_related('product'), pk=pk)
+        return Response(PricingTierSlabSerializer(slab).data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        slab = get_object_or_404(PricingTierSlab, pk=pk)
+        serializer = PricingTierSlabSerializer(slab, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = serializer.save()
+        return Response(PricingTierSlabSerializer(updated).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        slab = get_object_or_404(PricingTierSlab, pk=pk)
+        slab.delete()
+        return Response({"status": "DELETED"}, status=status.HTTP_204_NO_CONTENT)
+
+
+class PromotionalCampaignListCreateAPIView(APIView):
+    """
+    List and configure festive / seasonal marketing campaigns & tester allocations.
+    """
+    def get(self, request):
+        qs = PromotionalCampaign.objects.all().prefetch_related('applicable_skus').select_related('complimentary_tester_sku')
+        active_only = request.query_params.get('active_only')
+        if active_only and active_only.lower() in ('1', 'true'):
+            qs = [c for c in qs if c.is_currently_valid]
+            serializer = PromotionalCampaignSerializer(qs, many=True)
+        else:
+            serializer = PromotionalCampaignSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = PromotionalCampaignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        campaign = serializer.save()
+        return Response(PromotionalCampaignSerializer(campaign).data, status=status.HTTP_201_CREATED)
+
+
+class PromotionalCampaignDetailAPIView(APIView):
+    """
+    Retrieve or update a promotional campaign.
+    """
+    def get(self, request, campaign_code):
+        campaign = get_object_or_404(
+            PromotionalCampaign.objects.prefetch_related('applicable_skus').select_related('complimentary_tester_sku'),
+            campaign_code=campaign_code
+        )
+        return Response(PromotionalCampaignSerializer(campaign).data, status=status.HTTP_200_OK)
+
+    def patch(self, request, campaign_code):
+        campaign = get_object_or_404(PromotionalCampaign, campaign_code=campaign_code)
+        serializer = PromotionalCampaignSerializer(campaign, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = serializer.save()
+        return Response(PromotionalCampaignSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+class QuotationCalculatorAPIView(APIView):
+    """
+    Real-time Pre-Dispatch Profitability Simulator.
+    Evaluates Gross Margin, Net Realization, Margin Yield % prior to quotation approval.
+    Strictly protects the absolute formulation COGS price floor (NegativeMarginError).
+    """
+    def post(self, request):
+        serializer = ProfitabilitySimulationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            simulation = WholesalePricingEngine.simulate_order_profitability(
+                items=data['items'],
+                parent_id=data.get('parent_id'),
+                campaign_code=data.get('campaign_code'),
+                estimated_freight=data.get('estimated_freight', 0.00),
+                packaging_cost=data.get('packaging_cost', 0.00)
+            )
+            return Response(simulation, status=status.HTTP_200_OK)
+        except NegativeMarginError as e:
+            return Response(
+                {
+                    "status": "REJECTED_NEGATIVE_MARGIN",
+                    "error": str(e)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except (ProductNotFoundError, ValueError) as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WholesalerPricingProfileAPIView(APIView):
+    """
+    Retrieve and update B2B Retailer/Stockist trade profile, credit limits, licenses & margin tiers.
+    Credit limit modifications automatically trigger immutable AuditLog records.
+    """
+    def get(self, request, pk):
+        parent = get_object_or_404(WholesalerParent, pk=pk)
+        serializer = WholesalerProfileSerializer(parent)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        parent = get_object_or_404(WholesalerParent, pk=pk)
+        serializer = WholesalerProfileSerializer(parent, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated = serializer.save()
+        return Response(WholesalerProfileSerializer(updated).data, status=status.HTTP_200_OK)
+
