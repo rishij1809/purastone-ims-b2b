@@ -70,8 +70,27 @@ function generateAutoPoNumber(storeId) {
   return `PO-${prefix.toUpperCase()}-${year}-${randomSuffix}`;
 }
 
+// Elegant Custom 404 Route View
+function Custom404View({ onGoHome }) {
+  return (
+    <div className="panel-inner custom-404-view">
+      <div className="error-404-code">404</div>
+      <h3 className="serif-title" style={{ fontSize: '1.8rem', color: 'var(--burnt-clay-dark)', margin: '0.5rem 0 0.75rem' }}>
+        Formulation Route Not Found
+      </h3>
+      <p className="subtext" style={{ maxWidth: '520px', margin: '0 auto 1.5rem', color: 'var(--text-secondary)' }}>
+        The requested inventory partition, wholesale discount slab, or executive ledger route is unavailable or has been relocated.
+      </p>
+      <button type="button" className="erp-btn-primary" onClick={onGoHome} style={{ padding: '0.75rem 1.75rem' }}>
+        ← Return to Executive Dashboard
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('inv_dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [erpRole, setErpRole] = useState('ADMIN');
   const [inventory, setInventory] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -621,24 +640,58 @@ export default function App() {
     { id: 'fin_cashflow', keycode: '[M6]', label: 'Cash Flow & Runway Analyzer' },
   ];
 
+  const navigateToTab = (tabId) => {
+    setActiveTab(tabId);
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (tabId === 'inventory') fetchInventory();
+    if (tabId === 'logs') fetchTransactions();
+    if (tabId.startsWith('ws_')) fetchWholesalerData();
+  };
+
+  useEffect(() => {
+    const allNav = [...inventoryNavItems, ...wholesalerNavItems, ...financeNavItems];
+    const current = allNav.find((n) => n.id === activeTab);
+    const label = current ? current.label : 'Executive Dashboard';
+    document.title = `PURASTONE | ${label}`;
+  }, [activeTab]);
+
   return (
     <div className="erp-app-shell">
       {/* 1. TOP GLOBAL HEADER BAR */}
       <header className="erp-top-header">
-        <div className="top-left-branding">
-          <span className="erp-badge">[PURASTONE LOGISTICS IMS]</span>
-          <span className="erp-company-name">
-            PURASTONE NATURAL CARE & MINERAL LOGISTICS PVT. LTD.
-          </span>
-          <span className="erp-reg-info">
-            IBA REG: PURA/2026/9841 &bull; GSTIN: 27AABCP1092F1Z8
-          </span>
+        <div className="header-left-cluster">
+          <button
+            type="button"
+            className="mobile-menu-toggle-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close Navigation Menu' : 'Open Navigation Menu'}
+            title="Toggle Menu"
+          >
+            {mobileMenuOpen ? '✕' : '☰'}
+          </button>
+
+          <div
+            className="top-left-branding clickable-brand"
+            onClick={() => navigateToTab('inv_dashboard')}
+            role="button"
+            tabIndex={0}
+            title="Return to Executive Dashboard"
+          >
+            <span className="erp-badge">[PURASTONE LOGISTICS IMS]</span>
+            <span className="erp-company-name">
+              PURASTONE NATURAL CARE &amp; MINERAL LOGISTICS PVT. LTD.
+            </span>
+            <span className="erp-reg-info">
+              IBA REG: PURA/2026/9841 &bull; GSTIN: 27AABCP1092F1Z8
+            </span>
+          </div>
         </div>
 
         <div className="top-right-meta">
           <div className="header-select-pill">
             <span className="pill-tag">BRANCH:</span>
-            <span className="pill-val">Central WH & Fulfillment Hub ▼</span>
+            <span className="pill-val">Central WH &amp; Fulfillment Hub ▼</span>
           </div>
           <div className="header-select-pill user-pill">
             <span className="pill-tag">ROLE:</span>
@@ -654,11 +707,98 @@ export default function App() {
         </div>
       </header>
 
+      {/* MOBILE NAVIGATION DRAWER */}
+      {mobileMenuOpen && (
+        <div className="mobile-menu-overlay" onClick={() => setMobileMenuOpen(false)}>
+          <div className="mobile-menu-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-menu-header">
+              <div
+                className="sidebar-brand-section clickable-brand"
+                onClick={() => navigateToTab('inv_dashboard')}
+              >
+                <PurastoneLogoSmall />
+                <div className="sidebar-brand-text">
+                  <span className="sidebar-title">PURASTONE</span>
+                  <span className="sidebar-subtitle">ONLY WHAT YOU NEED</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="mobile-menu-close-btn"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mobile-menu-scroll">
+              <div className="sidebar-section-heading">GATEWAY OF INVENTORY</div>
+              <nav className="sidebar-nav-list">
+                {inventoryNavItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                    onClick={() => navigateToTab(item.id)}
+                  >
+                    <span className="nav-keycode">{item.keycode}</span>
+                    <span className="nav-label">{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="sidebar-section-heading wholesale-heading">GATEWAY OF WHOLESALER</div>
+              <nav className="sidebar-nav-list">
+                {wholesalerNavItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                    onClick={() => navigateToTab(item.id)}
+                  >
+                    <span className="nav-keycode">{item.keycode}</span>
+                    <span className="nav-label">{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="sidebar-section-heading finance-heading">FOUNDER FINANCIAL COMMAND</div>
+              <nav className="sidebar-nav-list">
+                {financeNavItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                    onClick={() => navigateToTab(item.id)}
+                  >
+                    <span className="nav-keycode">{item.keycode}</span>
+                    <span className="nav-label">{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+
+            <div className="mobile-menu-footer">
+              <div className="status-line">
+                <span className="status-dot"></span> STATUS: <strong>ONLINE</strong>
+              </div>
+              <div className="status-line">
+                &copy; {new Date().getFullYear()} PURASTONE NATURAL CARE
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. BODY LAYOUT: DOCKED SIDEBAR + MAIN WORKSPACE */}
       <div className="erp-body-layout">
         {/* LEFT SIDEBAR NAVIGATION */}
         <aside className="erp-sidebar">
-          <div className="sidebar-brand-section">
+          <div
+            className="sidebar-brand-section clickable-brand"
+            onClick={() => navigateToTab('inv_dashboard')}
+            role="button"
+            tabIndex={0}
+            title="Return to Executive Dashboard"
+          >
             <PurastoneLogoSmall />
             <div className="sidebar-brand-text">
               <span className="sidebar-title">PURASTONE</span>
@@ -673,11 +813,7 @@ export default function App() {
               <button
                 key={item.id}
                 className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  if (item.id === 'inventory') fetchInventory();
-                  if (item.id === 'logs') fetchTransactions();
-                }}
+                onClick={() => navigateToTab(item.id)}
               >
                 <span className="nav-keycode">{item.keycode}</span>
                 <span className="nav-label">{item.label}</span>
@@ -692,10 +828,7 @@ export default function App() {
               <button
                 key={item.id}
                 className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  fetchWholesalerData();
-                }}
+                onClick={() => navigateToTab(item.id)}
               >
                 <span className="nav-keycode">{item.keycode}</span>
                 <span className="nav-label">{item.label}</span>
@@ -710,7 +843,7 @@ export default function App() {
               <button
                 key={item.id}
                 className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => navigateToTab(item.id)}
               >
                 <span className="nav-keycode">{item.keycode}</span>
                 <span className="nav-label">{item.label}</span>
@@ -752,9 +885,17 @@ export default function App() {
         {/* RIGHT MAIN WORKSPACE */}
         <main className="erp-main-content">
           {notification && (
-            <div className={`erp-alert-banner ${notification.isError ? 'error' : 'success'}`}>
+            <div className={`erp-alert-banner ${notification.isError ? 'error' : 'success'}`} role="alert">
               <span className="alert-symbol">{notification.isError ? '⚠️' : '✦'}</span>
-              <span>{notification.msg}</span>
+              <span className="alert-msg">{notification.msg}</span>
+              <button
+                type="button"
+                className="alert-dismiss-btn"
+                onClick={() => setNotification(null)}
+                aria-label="Dismiss notification"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -2421,7 +2562,7 @@ export default function App() {
                           <td>{new Date(o.invoice.created_at).toLocaleString()}</td>
                           <td>
                             <a
-                              href={`http://127.0.0.1:8000${o.invoice.pdf_url}`}
+                              href={o.invoice.pdf_url?.startsWith('http') ? o.invoice.pdf_url : `${API_BASE.replace(/\/api\/?$/, '')}${o.invoice.pdf_url}`}
                               target="_blank"
                               rel="noreferrer"
                               className="erp-invoice-link"
@@ -2435,7 +2576,26 @@ export default function App() {
                 </table>
               </div>
             )}
+
+            {/* [404] CUSTOM 404 FOR UNKNOWN TAB / INVALID ROUTE */}
+            {![...inventoryNavItems, ...wholesalerNavItems, ...financeNavItems].some((n) => n.id === activeTab) && (
+              <Custom404View onGoHome={() => navigateToTab('inv_dashboard')} />
+            )}
           </div>
+
+          {/* ERP GLOBAL FOOTER WITH DYNAMIC YEAR & CLEAN NAVIGATION */}
+          <footer className="erp-footer">
+            <div className="erp-footer-content">
+              <span>&copy; {new Date().getFullYear()} PURASTONE Natural Care &amp; Mineral Logistics Pvt. Ltd. &bull; Enterprise ERP &amp; TMS</span>
+              <div className="erp-footer-links">
+                <button type="button" className="footer-link-btn" onClick={() => navigateToTab('inv_dashboard')}>Inventory Dashboard</button>
+                <span className="footer-divider">&bull;</span>
+                <button type="button" className="footer-link-btn" onClick={() => navigateToTab('ws_dashboard')}>Wholesale Portal</button>
+                <span className="footer-divider">&bull;</span>
+                <button type="button" className="footer-link-btn" onClick={() => navigateToTab('fin_ceo')}>CEO Financial Hub</button>
+              </div>
+            </div>
+          </footer>
         </main>
       </div>
     </div>
