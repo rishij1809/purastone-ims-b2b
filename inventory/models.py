@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from django.conf import settings
 import uuid
 
 # ==========================================
@@ -90,7 +90,7 @@ class TransactionLog(models.Model):
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
     source = models.CharField(max_length=20, choices=SOURCES)
     reason_code = models.CharField(max_length=255, blank=True, null=True)
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if self._state.adding is False and TransactionLog.objects.filter(pk=self.pk).exists():
@@ -123,7 +123,7 @@ class WholesalerParent(models.Model):
 
 class WholesalerChild(models.Model):
     parent = models.ForeignKey(WholesalerParent, on_delete=models.CASCADE, related_name='branches')
-    user = models.OneToOneField(User, on_delete=models.CASCADE) # The actual login ID
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE) # The actual login ID
     branch_name = models.CharField(max_length=255)
     store_id = models.CharField(max_length=100, unique=True)
     shipping_address = models.TextField()

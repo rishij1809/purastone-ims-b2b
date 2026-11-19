@@ -5,6 +5,8 @@ from django.conf import settings
 from django.views.static import serve
 from django.http import HttpResponse, FileResponse
 
+from core.views import HealthCheckView, ReadinessCheckView
+
 DIST_DIR = os.path.join(settings.BASE_DIR, 'frontend', 'dist')
 
 def serve_spa(request):
@@ -17,7 +19,12 @@ def serve_spa(request):
     )
 
 urlpatterns = [
+    path('healthz', HealthCheckView.as_view(), name='root-healthz'),
+    path('healthz/', HealthCheckView.as_view(), name='root-healthz-slash'),
+    path('readyz', ReadinessCheckView.as_view(), name='root-readyz'),
+    path('readyz/', ReadinessCheckView.as_view(), name='root-readyz-slash'),
     path('admin/', admin.site.urls),
+    path('api/core/', include('core.urls')),
     path('api/index.py', serve_spa),
     path('api/finance/', include('finance.urls')),
     path('api/', include('inventory.urls')),

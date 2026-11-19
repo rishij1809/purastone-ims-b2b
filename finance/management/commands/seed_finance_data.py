@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
+User = get_user_model()
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
@@ -288,3 +289,4 @@ class Command(BaseCommand):
 
         ensure_and_refresh_materialized_views()
         self.stdout.write(self.style.SUCCESS("Successfully seeded Purastone Phase 6 Financial Command Center data."))
+
