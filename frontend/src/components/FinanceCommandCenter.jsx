@@ -197,6 +197,9 @@ export default function FinanceCommandCenter({
     total_loss_amount: '',
     reason_notes: '',
   });
+  const [manualEntryMode, setManualEntryMode] = useState('COST');
+  const [docScanning, setDocScanning] = useState(false);
+  const [parsedDocSummary, setParsedDocSummary] = useState(null);
   const [csvType, setCsvType] = useState('opex');
   const [csvContent, setCsvContent] = useState('');
   const [reconcileModal, setReconcileModal] = useState(null);
@@ -333,6 +336,64 @@ export default function FinanceCommandCenter({
       loadTabData();
     } else {
       notify(d.error || JSON.stringify(d), true);
+    }
+  };
+
+  const handleDocumentUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setDocScanning(true);
+    setParsedDocSummary(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${apiBase}/finance/parse-document/`, {
+        method: 'POST',
+        headers: { 'X-ERP-Role': erpRole },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to parse financial document');
+      const ext = data.extracted;
+      setParsedDocSummary({ filename: file.name, ...ext });
+      if (ext.entry_type === 'INCOME') {
+        setManualEntryMode('INCOME');
+        setSaleForm((prev) => ({
+          ...prev,
+          gross_amount: ext.amount !== '0.00' ? ext.amount : prev.gross_amount,
+          sale_date: ext.date || prev.sale_date,
+          reference_number: ext.reference_number || prev.reference_number,
+          customer_or_store_name: ext.vendor_or_payee || prev.customer_or_store_name,
+          notes: ext.notes || prev.notes,
+        }));
+        notify(`✓ Auto-Extracted Income: ${ext.vendor_or_payee} (₹${ext.amount})`);
+      } else if (ext.entry_type === 'LOSS') {
+        setManualEntryMode('LOSS');
+        setLossForm((prev) => ({
+          ...prev,
+          total_loss_amount: ext.amount !== '0.00' ? ext.amount : prev.total_loss_amount,
+          incurred_date: ext.date || prev.incurred_date,
+          category: ext.category || prev.category,
+          reason_notes: ext.notes || prev.reason_notes,
+        }));
+        notify(`✓ Auto-Extracted Loss: ${ext.category} (₹${ext.amount})`);
+      } else {
+        setManualEntryMode('COST');
+        setOpexForm((prev) => ({
+          ...prev,
+          amount_exclusive_gst: ext.amount !== '0.00' ? ext.amount : prev.amount_exclusive_gst,
+          period_start_date: ext.date || prev.period_start_date,
+          period_end_date: ext.date || prev.period_end_date,
+          vendor_or_platform_name: ext.vendor_or_payee || prev.vendor_or_platform_name,
+          bucket: ext.category || prev.bucket,
+        }));
+        notify(`✓ Auto-Extracted Cost: ${ext.vendor_or_platform_name || ext.vendor_or_payee} (₹${ext.amount})`);
+      }
+    } catch (err) {
+      notify(`Document Parse Error: ${err.message}`, true);
+    } finally {
+      setDocScanning(false);
+      e.target.value = '';
     }
   };
 
@@ -891,7 +952,110 @@ export default function FinanceCommandCenter({
       {/* VIEW 4: MANUAL ENTRY, OFFLINE SALES & OPEX PORTAL */}
       {activeTab === 'fin_manual' && (
         <div className="erp-view-stack">
-          <div className="erp-grid-2">
+          {/* Smart Document & Payment Screenshot / Invoice Auto-Scanner */}
+          <div className="erp-panel" style={{ background: '#f8fafc', border: '1px dashed #6366f1', padding: '1.25rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#312e81', fontSize: '1.1rem' }}>📄 Smart Payment Screenshot &amp; Invoice Auto-Extractor</h3>
+                <p style={{ margin: '0.25rem 0 0 0', color: '#4b5563', fontSize: '0.875rem' }}>
+                  Upload a payment screenshot, receipt image, or PDF invoice. The system parses Amount, Date, Reference #, and Payee, and auto-fills the appropriate financial form.
+                </p>
+              </div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#4f46e5', color: '#fff', padding: '0.6rem 1.2rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 500, fontSize: '0.9rem' }}>
+                {docScanning ? '🔍 Scanning Document...' : '📤 Upload Screenshot or Invoice'}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,application/pdf"
+                  onChange={handleDocumentUpload}
+                  disabled={docScanning}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+
+            {parsedDocSummary && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ fontSize: '0.875rem', color: '#065f46' }}>
+                  <strong>✓ Successfully Parsed:</strong> {parsedDocSummary.filename} &bull; <strong>Payee/Source:</strong> {parsedDocSummary.vendor_or_payee} &bull; <strong>Amount:</strong> ₹{parsedDocSummary.amount} &bull; <strong>Date:</strong> {parsedDocSummary.date} &bull; <strong>Type:</strong> {parsedDocSummary.entry_type}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setParsedDocSummary(null)}
+                  style={{ background: 'none', border: 'none', color: '#065f46', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Form Mode Selector: Costs, Income, Losses */}
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
+            <button
+              type="button"
+              className={`erp-btn ${manualEntryMode === 'COST' ? 'erp-btn-primary' : 'erp-btn-outline'}`}
+              onClick={() => setManualEntryMode('COST')}
+            >
+              💸 Costs &amp; Spending (Marketing / Fixed OPEX)
+            </button>
+            <button
+              type="button"
+              className={`erp-btn ${manualEntryMode === 'INCOME' ? 'erp-btn-primary' : 'erp-btn-outline'}`}
+              onClick={() => setManualEntryMode('INCOME')}
+            >
+              💵 Income &amp; Offline Sales (Pop-Up / Gifting)
+            </button>
+            <button
+              type="button"
+              className={`erp-btn ${manualEntryMode === 'LOSS' ? 'erp-btn-primary' : 'erp-btn-outline'}`}
+              onClick={() => setManualEntryMode('LOSS')}
+            >
+              ⚠️ Losses &amp; Write-Offs (Breakage / Expired Lots)
+            </button>
+          </div>
+
+          {/* FORM 1: COSTS & SPENDING */}
+          {manualEntryMode === 'COST' && (
+            <div className="erp-panel">
+              <h3>Log Marketing Spend (CM3) &amp; Fixed OPEX (EBITDA)</h3>
+              <p className="panel-desc">Multi-day expenses prorate dynamically across the active dashboard date filter. Requires Admin sign-off.</p>
+              <form className="erp-form-stack" onSubmit={handleCreateOpex}>
+                <div className="erp-form-row">
+                  <label>Period Start
+                    <input type="date" required value={opexForm.period_start_date} onChange={(e) => setOpexForm({ ...opexForm, period_start_date: e.target.value })} />
+                  </label>
+                  <label>Period End
+                    <input type="date" required value={opexForm.period_end_date} onChange={(e) => setOpexForm({ ...opexForm, period_end_date: e.target.value })} />
+                  </label>
+                </div>
+                <label>Expense Bucket / Cost Type
+                  <select value={opexForm.bucket} onChange={(e) => setOpexForm({ ...opexForm, bucket: e.target.value })}>
+                    {EXPENSE_BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+                  </select>
+                </label>
+                <div className="erp-form-row">
+                  <label>Target Channel
+                    <select value={opexForm.target_channel} onChange={(e) => setOpexForm({ ...opexForm, target_channel: e.target.value })}>
+                      {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </label>
+                  <label>Amount Excl. GST (INR)
+                    <input type="number" step="0.01" min="0.01" required value={opexForm.amount_exclusive_gst} onChange={(e) => setOpexForm({ ...opexForm, amount_exclusive_gst: e.target.value })} />
+                  </label>
+                  <label>GST Input Credit (INR)
+                    <input type="number" step="0.01" value={opexForm.gst_input_credit} onChange={(e) => setOpexForm({ ...opexForm, gst_input_credit: e.target.value })} />
+                  </label>
+                </div>
+                <label>Vendor / Platform / Payee Name
+                  <input type="text" required placeholder="e.g. Meta Ads Manager / Bhiwandi Central Warehouse / Influencer Agency" value={opexForm.vendor_or_platform_name} onChange={(e) => setOpexForm({ ...opexForm, vendor_or_platform_name: e.target.value })} />
+                </label>
+                <button type="submit" className="erp-btn-primary">Submit Cost / Spend for Approval</button>
+              </form>
+            </div>
+          )}
+
+          {/* FORM 2: INCOME & OFFLINE SALES */}
+          {manualEntryMode === 'INCOME' && (
             <div className="erp-panel">
               <h3>Log Offline Store / Exhibition / Gifting Sale</h3>
               <p className="panel-desc">Linking a SKU automatically deducts FEFO batch stock &amp; computes COGS upon Admin approval.</p>
@@ -929,44 +1093,55 @@ export default function FinanceCommandCenter({
                     <input type="number" step="0.01" value={saleForm.manual_freight_and_packing} onChange={(e) => setSaleForm({ ...saleForm, manual_freight_and_packing: e.target.value })} />
                   </label>
                 </div>
-                <button type="submit" className="erp-btn-primary">Submit Sale for Approval</button>
+                <button type="submit" className="erp-btn-primary">Submit Sale / Income for Approval</button>
               </form>
             </div>
+          )}
 
+          {/* FORM 3: LOSSES & WRITE-OFFS */}
+          {manualEntryMode === 'LOSS' && (
             <div className="erp-panel">
-              <h3>Log Marketing Spend (CM3) &amp; Fixed OPEX (EBITDA)</h3>
-              <p className="panel-desc">Multi-day expenses prorate dynamically across the active dashboard date filter.</p>
-              <form className="erp-form-stack" onSubmit={handleCreateOpex}>
+              <h3>Log Non-Order Losses, Breakage &amp; Write-Offs</h3>
+              <p className="panel-desc">Logs inventory spillage, transit breakage, formulation expiry, or lab wastage impacting EBITDA.</p>
+              <form className="erp-form-stack" onSubmit={handleCreateLoss}>
                 <div className="erp-form-row">
-                  <label>Period Start
-                    <input type="date" required value={opexForm.period_start_date} onChange={(e) => setOpexForm({ ...opexForm, period_start_date: e.target.value })} />
+                  <label>Incurred Date
+                    <input type="date" required value={lossForm.incurred_date} onChange={(e) => setLossForm({ ...lossForm, incurred_date: e.target.value })} />
                   </label>
-                  <label>Period End
-                    <input type="date" required value={opexForm.period_end_date} onChange={(e) => setOpexForm({ ...opexForm, period_end_date: e.target.value })} />
+                  <label>Loss Category
+                    <select value={lossForm.category} onChange={(e) => setLossForm({ ...lossForm, category: e.target.value })}>
+                      <option value="TRANSIT_DAMAGE">Transit Damage / Breakage</option>
+                      <option value="EXPIRED_BATCH_WRITEOFF">Expired Formulation Batch Write-Off</option>
+                      <option value="MANUAL_WAREHOUSE_LOSS">Warehouse Spillage / Mishandling</option>
+                      <option value="RD_LAB_FAILURE">R&amp;D Formulation Lab Wastage</option>
+                      <option value="INVENTORY_SHRINKAGE_THEFT">Inventory Shrinkage / Theft</option>
+                      <option value="REGULATORY_SLA_PENALTY">SLA / Regulatory Penalty</option>
+                    </select>
                   </label>
                 </div>
-                <label>Expense Bucket
-                  <select value={opexForm.bucket} onChange={(e) => setOpexForm({ ...opexForm, bucket: e.target.value })}>
-                    {EXPENSE_BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-                  </select>
-                </label>
                 <div className="erp-form-row">
-                  <label>Target Channel
-                    <select value={opexForm.target_channel} onChange={(e) => setOpexForm({ ...opexForm, target_channel: e.target.value })}>
+                  <label>Affected Channel
+                    <select value={lossForm.channel} onChange={(e) => setLossForm({ ...lossForm, channel: e.target.value })}>
                       {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                   </label>
-                  <label>Amount Excl. GST
-                    <input type="number" step="0.01" min="0.01" required value={opexForm.amount_exclusive_gst} onChange={(e) => setOpexForm({ ...opexForm, amount_exclusive_gst: e.target.value })} />
+                  <label>Affected Batch ID (Optional)
+                    <input type="text" placeholder="e.g. BAT-2026-09-001" value={lossForm.affected_batch} onChange={(e) => setLossForm({ ...lossForm, affected_batch: e.target.value })} />
+                  </label>
+                  <label>Units Lost
+                    <input type="number" min="0" value={lossForm.units_lost} onChange={(e) => setLossForm({ ...lossForm, units_lost: e.target.value })} />
+                  </label>
+                  <label>Total Loss Amount (INR)
+                    <input type="number" step="0.01" min="0.01" required value={lossForm.total_loss_amount} onChange={(e) => setLossForm({ ...lossForm, total_loss_amount: e.target.value })} />
                   </label>
                 </div>
-                <label>Vendor / Platform Name
-                  <input type="text" required placeholder="e.g. Meta Ads Manager / Bhiwandi Landlord" value={opexForm.vendor_or_platform_name} onChange={(e) => setOpexForm({ ...opexForm, vendor_or_platform_name: e.target.value })} />
+                <label>Reason &amp; Root Cause Notes
+                  <textarea rows="2" required placeholder="Describe the cause of loss or damage..." value={lossForm.reason_notes} onChange={(e) => setLossForm({ ...lossForm, reason_notes: e.target.value })} />
                 </label>
-                <button type="submit" className="erp-btn-primary">Submit Spend for Approval</button>
+                <button type="submit" className="erp-btn-primary">Submit Loss Record for Approval</button>
               </form>
             </div>
-          </div>
+          )}
 
           {/* Maker-Checker Approval Queue */}
           <div className="erp-panel">

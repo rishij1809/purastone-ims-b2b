@@ -86,6 +86,20 @@ export default function App() {
   const [selectedParentAnalytics, setSelectedParentAnalytics] = useState(null);
 
   // Core IMS Intake Form State
+  const [productsList, setProductsList] = useState([]);
+  const [isIntakeNewProduct, setIsIntakeNewProduct] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    sku: '',
+    name: '',
+    category: 'MINERAL_CLEANSER',
+    skincare_line: 'CORE_MINERALS',
+    base_price: '999.00',
+    base_cost: '250.00',
+    default_b2b_price: '750.00',
+    packaging_format: '100ml Glass Bottle',
+    master_carton_qty: 24,
+  });
+
   const [intakeForm, setIntakeForm] = useState({
     sku: 'PURA-ALUM-ROLLON-100',
     quantity: 50,
@@ -171,10 +185,17 @@ export default function App() {
   const fetchInventory = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/inventory/`);
-      if (res.ok) {
-        const data = await res.json();
+      const [invRes, prodRes] = await Promise.all([
+        fetch(`${API_BASE}/inventory/`),
+        fetch(`${API_BASE}/products/`),
+      ]);
+      if (invRes.ok) {
+        const data = await invRes.json();
         setInventory(data);
+      }
+      if (prodRes.ok) {
+        const pData = await prodRes.json();
+        setProductsList(pData);
       }
     } catch (err) {
       console.error(err);
@@ -249,16 +270,58 @@ export default function App() {
     e.preventDefault();
     setLoading(true);
     try {
+      let targetSku = intakeForm.sku;
+      if (isIntakeNewProduct) {
+        if (!newProductForm.sku || !newProductForm.name) {
+          throw new Error('Please enter both SKU and Product Name for the new product.');
+        }
+        targetSku = newProductForm.sku.trim().toUpperCase();
+        const prodRes = await fetch(`${API_BASE}/products/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...newProductForm,
+            sku: targetSku,
+            base_price: parseFloat(newProductForm.base_price) || 0,
+            base_cost: parseFloat(newProductForm.base_cost) || 0,
+            default_b2b_price: parseFloat(newProductForm.default_b2b_price) || 0,
+            master_carton_qty: parseInt(newProductForm.master_carton_qty, 10) || 24,
+          }),
+        });
+        const prodData = await prodRes.json();
+        if (!prodRes.ok) {
+          throw new Error(prodData.detail || (prodData.sku ? `SKU error: ${prodData.sku}` : 'Failed to register product.'));
+        }
+      }
+
       const res = await fetch(`${API_BASE}/intake/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...intakeForm, quantity: parseInt(intakeForm.quantity, 10) }),
+        body: JSON.stringify({
+          ...intakeForm,
+          sku: targetSku,
+          quantity: parseInt(intakeForm.quantity, 10),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed intake');
-      showNotice(`Inbound verified: ${data.quantity_added} units received into batch ${data.batch_id}`);
+      showNotice(`✓ Inbound Verified: ${data.quantity_added} units received for ${targetSku} into batch ${data.batch_id} at ${intakeForm.warehouse}:${intakeForm.aisle}-${intakeForm.row}-${intakeForm.shelf}`);
       fetchInventory();
       fetchTransactions();
+      if (isIntakeNewProduct) {
+        setIsIntakeNewProduct(false);
+        setNewProductForm({
+          sku: '',
+          name: '',
+          category: 'MINERAL_CLEANSER',
+          skincare_line: 'CORE_MINERALS',
+          base_price: '999.00',
+          base_cost: '250.00',
+          default_b2b_price: '750.00',
+          packaging_format: '100ml Glass Bottle',
+          master_carton_qty: 24,
+        });
+      }
     } catch (err) {
       showNotice(err.message, true);
     } finally {
@@ -961,23 +1024,164 @@ export default function App() {
                   <div className="section-title-wrap">
                     <h3 className="serif-title">Inbound Inventory Intake</h3>
                     <p className="subtext">
-                      Enters inbound goods into the single source of truth ledger with exact warehouse, aisle, row, and shelf coordinates.
+                      Record inbound shipments into the single source of truth ledger with exact warehouse, aisle, row, shelf, and bin coordinates.
                     </p>
                   </div>
                 </div>
 
+                {/* Mode Selector: Select Existing vs Create New Product */}
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <button
+                    type="button"
+                    className={`erp-btn ${!isIntakeNewProduct ? 'erp-btn-primary' : 'erp-btn-outline'}`}
+                    onClick={() => setIsIntakeNewProduct(false)}
+                  >
+                    📦 Select Existing Product
+                  </button>
+                  <button
+                    type="button"
+                    className={`erp-btn ${isIntakeNewProduct ? 'erp-btn-primary' : 'erp-btn-outline'}`}
+                    onClick={() => setIsIntakeNewProduct(true)}
+                  >
+                    ✨ + Add New Product to Catalog
+                  </button>
+                </div>
+
                 <form onSubmit={handleIntakeSubmit} className="erp-form-grid">
+                  {!isIntakeNewProduct ? (
+                    <div className="form-cell full-span">
+                      <label>SELECT PRODUCT FROM CATALOG</label>
+                      <select
+                        value={intakeForm.sku}
+                        onChange={(e) => setIntakeForm({ ...intakeForm, sku: e.target.value })}
+                        required
+                        style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+                      >
+                        {productsList && productsList.length > 0 ? (
+                          productsList.map((p) => (
+                            <option key={p.sku} value={p.sku}>
+                              {p.sku} — {p.name} (MRP: ₹{p.base_price})
+                            </option>
+                          ))
+                        ) : (
+                          (inventory || []).map((p) => (
+                            <option key={p.sku} value={p.sku}>
+                              {p.sku} — {p.name}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      {(() => {
+                        const selected = (productsList || []).find((p) => p.sku === intakeForm.sku) || (inventory || []).find((p) => p.sku === intakeForm.sku);
+                        if (!selected) return null;
+                        return (
+                          <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem', display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
+                            <span><strong>Category:</strong> {selected.category}</span>
+                            <span><strong>MRP:</strong> ₹{selected.base_price}</span>
+                            <span><strong>Base Cost (COGS):</strong> ₹{selected.base_cost}</span>
+                            <span><strong>B2B PTR:</strong> ₹{selected.default_b2b_price}</span>
+                            {selected.packaging_format && <span><strong>Format:</strong> {selected.packaging_format}</span>}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="form-cell full-span" style={{ background: '#f0fdf4', padding: '1rem', borderRadius: '8px', border: '1px solid #bbf7d0', marginBottom: '0.5rem' }}>
+                      <div style={{ fontWeight: 600, color: '#166534', marginBottom: '0.75rem', fontSize: '0.95rem' }}>
+                        ➕ Register New Product in Catalog (Will be created automatically before stock intake)
+                      </div>
+                      <div className="erp-form-grid" style={{ gap: '0.75rem' }}>
+                        <div className="form-cell">
+                          <label>NEW PRODUCT SKU</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. PURA-CLAY-MASK-100"
+                            value={newProductForm.sku}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, sku: e.target.value.toUpperCase() })}
+                            required={isIntakeNewProduct}
+                          />
+                        </div>
+                        <div className="form-cell">
+                          <label>PRODUCT NAME</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Volcanic Clay Detoxifying Mask"
+                            value={newProductForm.name}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                            required={isIntakeNewProduct}
+                          />
+                        </div>
+                        <div className="form-cell">
+                          <label>CATEGORY</label>
+                          <select
+                            value={newProductForm.category}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value })}
+                          >
+                            <option value="MINERAL_CLEANSER">Mineral Cleanser</option>
+                            <option value="CLAY_MASK">Clay Mask</option>
+                            <option value="SERUM">Active Serum</option>
+                            <option value="MOISTURIZER">Mineral Moisturizer</option>
+                            <option value="EXFOLIANT">Exfoliant</option>
+                            <option value="SUNSCREEN">Mineral Sunscreen</option>
+                            <option value="OTHER">Other Formulation</option>
+                          </select>
+                        </div>
+                        <div className="form-cell">
+                          <label>SKINCARE LINE</label>
+                          <select
+                            value={newProductForm.skincare_line}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, skincare_line: e.target.value })}
+                          >
+                            <option value="CORE_MINERALS">Core Minerals</option>
+                            <option value="BOTANICAL_DEFENSE">Botanical Defense</option>
+                            <option value="CELLULAR_REPAIR">Cellular Repair</option>
+                          </select>
+                        </div>
+                        <div className="form-cell">
+                          <label>MRP (INR)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newProductForm.base_price}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, base_price: e.target.value })}
+                            required={isIntakeNewProduct}
+                          />
+                        </div>
+                        <div className="form-cell">
+                          <label>BASE COST / COGS (INR)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newProductForm.base_cost}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, base_cost: e.target.value })}
+                            required={isIntakeNewProduct}
+                          />
+                        </div>
+                        <div className="form-cell">
+                          <label>DEFAULT B2B PRICE / PTR (INR)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newProductForm.default_b2b_price}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, default_b2b_price: e.target.value })}
+                            required={isIntakeNewProduct}
+                          />
+                        </div>
+                        <div className="form-cell">
+                          <label>PACKAGING FORMAT</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 100g Amber Glass Jar"
+                            value={newProductForm.packaging_format}
+                            onChange={(e) => setNewProductForm({ ...newProductForm, packaging_format: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="form-cell">
-                    <label>PRODUCT SKU</label>
-                    <input
-                      type="text"
-                      value={intakeForm.sku}
-                      onChange={(e) => setIntakeForm({ ...intakeForm, sku: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-cell">
-                    <label>QUANTITY INBOUND</label>
+                    <label>QUANTITY INBOUND (UNITS)</label>
                     <input
                       type="number"
                       min="1"
@@ -987,7 +1191,20 @@ export default function App() {
                     />
                   </div>
                   <div className="form-cell">
-                    <label>BATCH NUMBER / ID</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label>BATCH NUMBER / ID</label>
+                      <button
+                        type="button"
+                        style={{ fontSize: '0.75rem', background: 'none', border: 'none', color: '#0f766e', cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => {
+                          const d = new Date().toISOString().slice(2, 7).replace('-', '');
+                          const rnd = Math.floor(100 + Math.random() * 900);
+                          setIntakeForm({ ...intakeForm, batch_id: `BAT-2026-${d}-${rnd}` });
+                        }}
+                      >
+                        ⚡ Quick Gen
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={intakeForm.batch_id}
@@ -1023,9 +1240,10 @@ export default function App() {
                     />
                   </div>
                   <div className="form-cell">
-                    <label>AISLE</label>
+                    <label>AISLE / EULER SECTION</label>
                     <input
                       type="text"
+                      placeholder="e.g. Aisle A-02"
                       value={intakeForm.aisle}
                       onChange={(e) => setIntakeForm({ ...intakeForm, aisle: e.target.value })}
                       required
@@ -1035,6 +1253,7 @@ export default function App() {
                     <label>ROW</label>
                     <input
                       type="text"
+                      placeholder="e.g. Row 01"
                       value={intakeForm.row}
                       onChange={(e) => setIntakeForm({ ...intakeForm, row: e.target.value })}
                       required
@@ -1044,6 +1263,7 @@ export default function App() {
                     <label>SHELF</label>
                     <input
                       type="text"
+                      placeholder="e.g. Shelf S-02"
                       value={intakeForm.shelf}
                       onChange={(e) => setIntakeForm({ ...intakeForm, shelf: e.target.value })}
                       required
@@ -1053,13 +1273,14 @@ export default function App() {
                     <label>BIN (OPTIONAL)</label>
                     <input
                       type="text"
+                      placeholder="e.g. Bin B-03"
                       value={intakeForm.bin}
                       onChange={(e) => setIntakeForm({ ...intakeForm, bin: e.target.value })}
                     />
                   </div>
                   <div className="form-cell full-span">
                     <button type="submit" className="erp-btn-primary" disabled={loading}>
-                      {loading ? 'Recording Inbound...' : 'Commit Inbound Goods to Ledger'}
+                      {loading ? 'Recording Inbound Goods...' : 'Commit Inbound Goods to Ledger'}
                     </button>
                   </div>
                 </form>
