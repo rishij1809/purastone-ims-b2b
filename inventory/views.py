@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import (
-    Product, TransactionLog, WholesalerParent, WholesalerChild,
+    Product, Batch, Location, InventoryLedger, TransactionLog, WholesalerParent, WholesalerChild,
     WholesaleOrder, Invoice
 )
 from .services import InventoryEngine, WholesalerService
@@ -22,7 +22,12 @@ from .serializers import (
     WholesaleOrderSerializer,
     WholesaleOrderCreateSerializer,
     WholesaleDiscountSerializer,
-    InvoiceSerializer
+    InvoiceSerializer,
+    BatchSerializer,
+    BatchCreateSerializer,
+    BatchQuarantineSerializer,
+    FefoSimulationSerializer,
+    DispatchGatePassSerializer
 )
 
 
@@ -291,3 +296,174 @@ class InvoiceListAPIView(APIView):
         invoices = Invoice.objects.select_related('order__parent_wholesaler', 'order__child_wholesaler').order_by('-created_at')[:100]
         serializer = InvoiceSerializer(invoices, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ==========================================
+# PHASE 2: MINERAL SKINCARE PRODUCT & BATCH TRACEABILITY
+# ==========================================
+
+class ProductListCreateAPIView(APIView):
+    """
+    Mineral Skincare SKU Directory:
+    Supports filtering by category, skincare_line, mineral_actives, HSN, and barcode.
+    """
+    def get(self, request):
+        qs = Product.objects.all().order_by('sku')
+        category = request.query_params.get('category')
+        line = request.query_params.get('skincare_line')
+        active = request.query_params.get('mineral_active')
+        hsn = request.query_params.get('hsn_code')
+        search = request.query_params.get('search')
+
+        if category:
+            qs = qs.filter(category=category)
+        if line:
+            qs = qs.filter(skincare_line=line)
+        if active:
+            qs = qs.filter(mineral_actives__icontains=active)
+        if hsn:
+            qs = qs.filter(hsn_code=hsn)
+        if search:
+            qs = qs.filter(name__icontains=search) | qs.filter(sku__icontains=search)
+
+        serializer = ProductSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = ProductSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        product = serializer.save()
+        return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
+
+
+class ProductDetailAPIView(APIView):
+    """
+    Product SKU retrieval and update.
+    """
+    def get(self, request, sku):
+        try:
+            product = Product.objects.get(sku=sku)
+            return Response(ProductSerializer(product).data, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response({"error": f"Product '{sku}' not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request, sku):
+        try:
+            product = Product.objects.get(sku=sku)
+            serializer = ProductSerializer(product, data=request.data, partial=False)
+            serializer.is_valid(raise_exception=True)
+            updated = serializer.save()
+            return Response(ProductSerializer(updated).data, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response({"error": f"Product '{sku}' not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request, sku):
+        try:
+            product = Product.objects.get(sku=sku)
+            serializer = ProductSerializer(product, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            updated = serializer.save()
+            return Response(ProductSerializer(updated).data, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response({"error": f"Product '{sku}' not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class BatchListCreateAPIView(APIView):
+    """
+    Formulation Batch Directory & Compliance Tracker.
+    Filter by product_sku, quarantine_status, near_expiry, expired.
+    """
+    def get(self, request):
+        qs = Batch.objects.select_related('product').all().order_by('expiry_date', 'mfg_date')
+        product_sku = request.query_params.get('product_sku')
+        quarantined = request.query_params.get('quarantined')
+        near_expiry = request.query_params.get('near_expiry')
+
+        if product_sku:
+            qs = qs.filter(product_id=product_sku)
+        if quarantined is not None:
+            is_q = quarantined.lower() in ('1', 'true', 'yes')
+            qs = qs.filter(quarantine_status=is_q)
+        if near_expiry:
+            from datetime import date, timedelta
+            today = date.today()
+            qs = qs.filter(expiry_date__gt=today, expiry_date__lte=today + timedelta(days=90))
+
+        serializer = BatchSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = BatchCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        batch = serializer.save()
+        return Response(BatchSerializer(batch).data, status=status.HTTP_201_CREATED)
+
+
+class BatchDetailAPIView(APIView):
+    """
+    Detailed Batch Genealogy & Traceability.
+    """
+    def get(self, request, batch_id):
+        try:
+            report = InventoryEngine.get_batch_traceability(batch_id=batch_id)
+            return Response(report, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+
+class BatchQuarantineAPIView(APIView):
+    """
+    Toggle quarantine status for a formulation lot.
+    """
+    def post(self, request, batch_id):
+        serializer = BatchQuarantineSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = InventoryEngine.set_batch_quarantine(
+                batch_id=batch_id,
+                quarantine=serializer.validated_data['quarantine'],
+                reason=serializer.validated_data['reason'],
+                user=request.user if request.user.is_authenticated else None
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+
+class FefoPreviewAPIView(APIView):
+    """
+    Pre-dispatch FEFO lot allocation simulation.
+    """
+    def post(self, request):
+        serializer = FefoSimulationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            preview = InventoryEngine.simulate_fefo_pick(
+                sku=serializer.validated_data['sku'],
+                quantity=serializer.validated_data['quantity']
+            )
+            return Response(preview, status=status.HTTP_200_OK)
+        except (ValueError, ProductNotFoundError) as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DispatchGatePassOuttakeAPIView(APIView):
+    """
+    Atomically depletes FEFO stock tied to gate-pass issuance and LR generation.
+    """
+    def post(self, request):
+        serializer = DispatchGatePassSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        try:
+            manifest = InventoryEngine.dispatch_gate_pass_fefo_outtake(
+                dispatch_reference=data['dispatch_reference'],
+                items=data['items'],
+                user=request.user if request.user.is_authenticated else None,
+                gate_pass_number=data.get('gate_pass_number'),
+                lr_number=data.get('lr_number')
+            )
+            return Response(manifest, status=status.HTTP_200_OK)
+        except (InsufficientStockError, ProductNotFoundError, ValueError) as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

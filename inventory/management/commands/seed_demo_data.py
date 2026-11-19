@@ -17,11 +17,30 @@ class Command(BaseCommand):
             sku="PURA-ALUM-ROLLON-100",
             defaults={
                 "name": "Purastone Natural Alum After-Shave Roll-On 100ml",
+                "category": "MINERAL_CLEANSER",
+                "skincare_line": "PURA_ALUM_WELLNESS",
+                "mineral_actives": "Natural Potassium Alum, Witch Hazel, Aloe Vera",
+                "packaging_format": "100ml Roll-On Applicator Bottle",
+                "net_volume_ml_g": Decimal("100.00"),
+                "barcode_ean13_upc": "8901234567890",
+                "hsn_code": "33049990",
+                "dead_weight_kg": Decimal("0.180"),
+                "inner_pack_count": 6,
+                "master_carton_qty": 24,
                 "base_price": Decimal("749.00"),
                 "base_cost": Decimal("250.00"),
                 "default_b2b_price": Decimal("450.00")
             }
         )
+        rollon.category = "MINERAL_CLEANSER"
+        rollon.skincare_line = "PURA_ALUM_WELLNESS"
+        rollon.mineral_actives = "Natural Potassium Alum, Witch Hazel, Aloe Vera"
+        rollon.packaging_format = "100ml Roll-On Applicator Bottle"
+        rollon.barcode_ean13_upc = "8901234567890"
+        rollon.hsn_code = "33049990"
+        rollon.dead_weight_kg = Decimal("0.180")
+        rollon.inner_pack_count = 6
+        rollon.master_carton_qty = 24
         rollon.base_cost = Decimal("250.00")
         rollon.default_b2b_price = Decimal("450.00")
         rollon.save()
@@ -37,11 +56,29 @@ class Command(BaseCommand):
             sku="PURA-MINERAL-MIST-150",
             defaults={
                 "name": "Purastone Soothing Mineral Facial Mist 150ml",
+                "category": "SERUM",
+                "skincare_line": "MINERAL_GLOW",
+                "mineral_actives": "Volcanic Mineral Water, Magnesium PCA, Niacinamide",
+                "packaging_format": "150ml Fine Mist Spray Bottle",
+                "net_volume_ml_g": Decimal("150.00"),
+                "barcode_ean13_upc": "8901234567891",
+                "hsn_code": "33049990",
+                "dead_weight_kg": Decimal("0.220"),
+                "inner_pack_count": 6,
+                "master_carton_qty": 24,
                 "base_price": Decimal("649.00"),
                 "base_cost": Decimal("200.00"),
                 "default_b2b_price": Decimal("380.00")
             }
         )
+        mist.category = "SERUM"
+        mist.skincare_line = "MINERAL_GLOW"
+        mist.mineral_actives = "Volcanic Mineral Water, Magnesium PCA, Niacinamide"
+        mist.packaging_format = "150ml Fine Mist Spray Bottle"
+        mist.barcode_ean13_upc = "8901234567891"
+        mist.dead_weight_kg = Decimal("0.220")
+        mist.inner_pack_count = 6
+        mist.master_carton_qty = 24
         mist.base_cost = Decimal("200.00")
         mist.default_b2b_price = Decimal("380.00")
         mist.save()
@@ -51,6 +88,14 @@ class Command(BaseCommand):
             sku="LIPSTICK-RUBY-01",
             defaults={
                 "name": "Ruby Matte Liquid Lipstick",
+                "category": "OTHER",
+                "skincare_line": "CORE_MINERALS",
+                "mineral_actives": "Micronized Mineral Pigments, Jojoba Esters",
+                "packaging_format": "6ml Matte Tube",
+                "net_volume_ml_g": Decimal("6.00"),
+                "barcode_ean13_upc": "8901234567899",
+                "hsn_code": "33041000",
+                "dead_weight_kg": Decimal("0.050"),
                 "base_price": Decimal("599.00"),
                 "base_cost": Decimal("180.00"),
                 "default_b2b_price": Decimal("350.00")

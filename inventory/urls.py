@@ -14,11 +14,25 @@ from .views import (
     WholesaleOrderApplyDiscountAPIView,
     WholesaleOrderConfirmAPIView,
     WholesaleAnalyticsAPIView,
-    InvoiceListAPIView
+    InvoiceListAPIView,
+    ProductListCreateAPIView,
+    ProductDetailAPIView,
+    BatchListCreateAPIView,
+    BatchDetailAPIView,
+    BatchQuarantineAPIView,
+    FefoPreviewAPIView,
+    DispatchGatePassOuttakeAPIView
 )
 
 urlpatterns = [
     # Core Inventory Endpoints
+    path('products/', ProductListCreateAPIView.as_view(), name='api_products_list_create'),
+    path('products/<str:sku>/', ProductDetailAPIView.as_view(), name='api_product_detail'),
+    path('batches/', BatchListCreateAPIView.as_view(), name='api_batches_list_create'),
+    path('batches/<str:batch_id>/', BatchDetailAPIView.as_view(), name='api_batch_detail'),
+    path('batches/<str:batch_id>/quarantine/', BatchQuarantineAPIView.as_view(), name='api_batch_quarantine'),
+    path('inventory/fefo-preview/', FefoPreviewAPIView.as_view(), name='api_fefo_preview'),
+    path('inventory/dispatch-gate-pass/', DispatchGatePassOuttakeAPIView.as_view(), name='api_dispatch_gate_pass'),
     path('intake/', IntakeAPIView.as_view(), name='api_intake'),
     path('outtake/', OuttakeAPIView.as_view(), name='api_outtake'),
     path('adjust/', ManualAdjustmentAPIView.as_view(), name='api_adjust'),

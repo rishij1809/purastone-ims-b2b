@@ -1,3 +1,5 @@
+from django.db.models import Sum
+from django.utils import timezone
 from rest_framework import serializers
 from .models import (
     Product, BundleMapping, Batch, Location, InventoryLedger, TransactionLog,
@@ -6,9 +8,36 @@ from .models import (
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    skincare_line_display = serializers.CharField(source='get_skincare_line_display', read_only=True)
+    volumetric_weight_kg = serializers.DecimalField(max_digits=8, decimal_places=3, read_only=True)
+    chargeable_weight_kg = serializers.DecimalField(max_digits=8, decimal_places=3, read_only=True)
+    total_sellable_stock = serializers.SerializerMethodField()
+
     class Meta:
         model = Product
-        fields = ['sku', 'name', 'base_price', 'base_cost', 'default_b2b_price']
+        fields = [
+            'sku', 'name', 'category', 'category_display',
+            'skincare_line', 'skincare_line_display',
+            'mineral_actives', 'packaging_format', 'net_volume_ml_g',
+            'barcode_ean13_upc', 'hsn_code',
+            'dead_weight_kg', 'length_cm', 'width_cm', 'height_cm',
+            'volumetric_weight_kg', 'chargeable_weight_kg',
+            'inner_pack_count', 'master_carton_qty',
+            'base_price', 'base_cost', 'default_b2b_price',
+            'total_sellable_stock'
+        ]
+
+    def get_total_sellable_stock(self, obj) -> int:
+        from django.utils import timezone
+        today = timezone.now().date()
+        total = InventoryLedger.objects.filter(
+            product=obj,
+            quantity__gt=0,
+            batch__expiry_date__gte=today,
+            batch__quarantine_status=False
+        ).aggregate(total=Sum('quantity'))['total']
+        return total or 0
 
 
 class BundleMappingSerializer(serializers.ModelSerializer):
@@ -159,3 +188,87 @@ class WholesaleOrderCreateSerializer(serializers.Serializer):
 class WholesaleDiscountSerializer(serializers.Serializer):
     discount_type = serializers.ChoiceField(choices=['FLAT', 'PERCENTAGE'])
     discount_value = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+
+
+# ==========================================
+# PHASE 2: BATCH TRACEABILITY & FEFO DISPATCH
+# ==========================================
+
+class BatchSerializer(serializers.ModelSerializer):
+    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+    days_to_expiry = serializers.IntegerField(read_only=True)
+    is_near_expiry = serializers.BooleanField(read_only=True)
+    is_sellable_fefo = serializers.BooleanField(read_only=True)
+    total_quantity = serializers.SerializerMethodField()
+    locations = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Batch
+        fields = [
+            'batch_id', 'product', 'product_sku', 'product_name',
+            'mfg_date', 'expiry_date', 'shelf_life_days',
+            'shelf_life_threshold_days', 'quarantine_status',
+            'compliance_certificate_number', 'coa_document',
+            'formulation_notes', 'is_expired', 'days_to_expiry',
+            'is_near_expiry', 'is_sellable_fefo', 'total_quantity',
+            'locations'
+        ]
+
+    def get_total_quantity(self, obj) -> int:
+        total = InventoryLedger.objects.filter(batch=obj).aggregate(total=Sum('quantity'))['total']
+        return total or 0
+
+    def get_locations(self, obj) -> list:
+        ledgers = InventoryLedger.objects.filter(batch=obj, quantity__gt=0).select_related('location')
+        return [
+            {
+                "location_id": str(l.location.id),
+                "warehouse": l.location.warehouse,
+                "shelf_code": f"{l.location.warehouse}:{l.location.aisle}-{l.location.row}-{l.location.shelf}",
+                "bin": l.location.bin,
+                "quantity": l.quantity
+            }
+            for l in ledgers
+        ]
+
+
+class BatchCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Batch
+        fields = [
+            'batch_id', 'product', 'mfg_date', 'expiry_date',
+            'shelf_life_days', 'shelf_life_threshold_days',
+            'compliance_certificate_number', 'coa_document',
+            'formulation_notes'
+        ]
+
+    def validate(self, attrs):
+        mfg = attrs.get('mfg_date')
+        exp = attrs.get('expiry_date')
+        if mfg and exp and exp <= mfg:
+            raise serializers.ValidationError("Expiry date must be strictly after the manufacturing date.")
+        return attrs
+
+
+class BatchQuarantineSerializer(serializers.Serializer):
+    quarantine = serializers.BooleanField(required=True)
+    reason = serializers.CharField(required=True, min_length=5)
+
+
+class FefoSimulationSerializer(serializers.Serializer):
+    sku = serializers.CharField(max_length=100)
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class DispatchGatePassItemSerializer(serializers.Serializer):
+    sku = serializers.CharField(max_length=100)
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class DispatchGatePassSerializer(serializers.Serializer):
+    dispatch_reference = serializers.CharField(max_length=100)
+    gate_pass_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    lr_number = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    items = DispatchGatePassItemSerializer(many=True)

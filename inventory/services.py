@@ -13,6 +13,8 @@ from .exceptions import (
     InsufficientStockError, InvalidAdjustmentError, ProductNotFoundError, NegativeMarginError
 )
 from .tasks import sync_channel_inventory_task, generate_invoice_pdf_task
+from core.services import AuditService
+from core.models import AuditAction
 
 
 class InventoryEngine:
@@ -98,11 +100,16 @@ class InventoryEngine:
 
         today = timezone.now().date()
 
-        # Strict FEFO: query unexpired batches ordered by expiry_date ASC, mfg_date ASC
+        # Strict FEFO: query unexpired and non-quarantined batches ordered by expiry_date ASC, mfg_date ASC
         ledgers = list(
             InventoryLedger.objects.select_for_update()
             .select_related('batch', 'location')
-            .filter(product=product, quantity__gt=0, batch__expiry_date__gte=today)
+            .filter(
+                product=product,
+                quantity__gt=0,
+                batch__expiry_date__gte=today,
+                batch__quarantine_status=False
+            )
             .order_by('batch__expiry_date', 'batch__mfg_date', 'batch__batch_id')
         )
 
@@ -216,6 +223,303 @@ class InventoryEngine:
             "quantity_change": quantity_change,
             "new_balance": ledger.quantity,
             "reason_code": reason_code.strip()
+        }
+
+    @classmethod
+    def simulate_fefo_pick(cls, sku: str, quantity: int) -> dict:
+        """
+        Read-only simulation of FEFO lot allocation without deducting stock.
+        Surfaces exactly which batches, warehouse coordinates, and near-expiry
+        formulations will be routed before committing order dispatch.
+        """
+        if quantity <= 0:
+            raise ValueError("Simulation quantity must be greater than zero.")
+
+        try:
+            product = Product.objects.get(sku=sku)
+        except Product.DoesNotExist:
+            raise ProductNotFoundError(f"Product with SKU '{sku}' not found.")
+
+        today = timezone.now().date()
+        ledgers = (
+            InventoryLedger.objects.filter(
+                product=product,
+                quantity__gt=0,
+                batch__expiry_date__gte=today,
+                batch__quarantine_status=False
+            )
+            .select_related('batch', 'location')
+            .order_by('batch__expiry_date', 'batch__mfg_date', 'batch__batch_id')
+        )
+
+        total_available = sum(l.quantity for l in ledgers)
+        is_sufficient = total_available >= quantity
+
+        simulated_picks = []
+        remaining = quantity
+        has_near_expiry = False
+
+        for l in ledgers:
+            if remaining <= 0:
+                break
+            pick_qty = min(l.quantity, remaining)
+            is_near_exp = l.batch.is_near_expiry
+            if is_near_exp:
+                has_near_expiry = True
+
+            loc = l.location
+            bin_label = f", Bin {loc.bin}" if loc.bin else ""
+            simulated_picks.append({
+                "batch_id": l.batch.batch_id,
+                "mfg_date": l.batch.mfg_date.isoformat(),
+                "expiry_date": l.batch.expiry_date.isoformat(),
+                "days_to_expiry": l.batch.days_to_expiry,
+                "is_near_expiry": is_near_exp,
+                "compliance_certificate_number": l.batch.compliance_certificate_number,
+                "coa_available": bool(l.batch.coa_document),
+                "warehouse": loc.warehouse,
+                "location_str": f"{loc.warehouse}:{loc.aisle}-{loc.row}-{loc.shelf}{bin_label}",
+                "simulated_quantity": pick_qty,
+                "bin_available": l.quantity
+            })
+            remaining -= pick_qty
+
+        return {
+            "sku": sku,
+            "product_name": product.name,
+            "category": product.category,
+            "skincare_line": product.skincare_line,
+            "requested_quantity": quantity,
+            "total_available_fefo_stock": total_available,
+            "is_fulfillable": is_sufficient,
+            "shortfall": max(0, quantity - total_available),
+            "contains_near_expiry_batches": has_near_expiry,
+            "proposed_pick_plan": simulated_picks
+        }
+
+    @classmethod
+    @transaction.atomic
+    def dispatch_gate_pass_fefo_outtake(
+        cls,
+        dispatch_reference: str,
+        items: list,
+        user=None,
+        gate_pass_number: str = None,
+        lr_number: str = None
+    ) -> dict:
+        """
+        Executes real-time FEFO stock depletion tied directly to TMS Gate-Pass issuance
+        and Lorry Receipt (LR) dispatch. Enforces strict row locks to prevent double-booking.
+        """
+        if not items:
+            raise ValueError("Dispatch items list cannot be empty.")
+
+        dispatch_manifest = {
+            "dispatch_reference": dispatch_reference,
+            "gate_pass_number": gate_pass_number or f"GP-{dispatch_reference}",
+            "lr_number": lr_number,
+            "timestamp": timezone.now().isoformat(),
+            "items_dispatched": [],
+            "total_units": 0,
+            "total_cartons": Decimal('0.0'),
+            "total_chargeable_weight_kg": Decimal('0.000'),
+        }
+
+        today = timezone.now().date()
+
+        for it in items:
+            sku = it['sku']
+            qty = it['quantity']
+            if qty <= 0:
+                continue
+
+            try:
+                product = Product.objects.get(sku=sku)
+            except Product.DoesNotExist:
+                raise ProductNotFoundError(f"Product '{sku}' not found for gate-pass dispatch.")
+
+            # Strict FEFO lock: unexpired & non-quarantined lots
+            ledgers = list(
+                InventoryLedger.objects.select_for_update()
+                .select_related('batch', 'location')
+                .filter(
+                    product=product,
+                    quantity__gt=0,
+                    batch__expiry_date__gte=today,
+                    batch__quarantine_status=False
+                )
+                .order_by('batch__expiry_date', 'batch__mfg_date', 'batch__batch_id')
+            )
+
+            avail = sum(l.quantity for l in ledgers)
+            if avail < qty:
+                raise InsufficientStockError(
+                    f"Gate-Pass dispatch aborted for '{sku}': Insufficient FEFO sellable stock. Required: {qty}, Available: {avail}"
+                )
+
+            rem = qty
+            item_picks = []
+
+            for l in ledgers:
+                if rem <= 0:
+                    break
+                deduct = min(l.quantity, rem)
+                l.quantity -= deduct
+                l.save(update_fields=['quantity'])
+
+                loc = l.location
+                item_picks.append({
+                    "batch_id": l.batch.batch_id,
+                    "mfg_date": l.batch.mfg_date.isoformat(),
+                    "expiry_date": l.batch.expiry_date.isoformat(),
+                    "compliance_certificate": l.batch.compliance_certificate_number,
+                    "quantity": deduct,
+                    "warehouse": loc.warehouse,
+                    "location_code": f"{loc.warehouse}:{loc.aisle}-{loc.row}-{loc.shelf}"
+                })
+
+                TransactionLog.objects.create(
+                    product=product,
+                    batch=l.batch,
+                    location=loc,
+                    quantity_change=-deduct,
+                    transaction_type='OUTTAKE',
+                    source='GATE_PASS',
+                    reason_code=f"GatePass: {dispatch_manifest['gate_pass_number']} | Ref: {dispatch_reference}",
+                    user=user
+                )
+                rem -= deduct
+
+            cartons = (Decimal(qty) / Decimal(product.master_carton_qty)).quantize(Decimal('0.1'))
+            weight = (Decimal(qty) * product.chargeable_weight_kg).quantize(Decimal('0.001'))
+
+            dispatch_manifest["items_dispatched"].append({
+                "sku": product.sku,
+                "name": product.name,
+                "category": product.category,
+                "quantity": qty,
+                "cartons": float(cartons),
+                "chargeable_weight_kg": float(weight),
+                "batch_picks": item_picks
+            })
+            dispatch_manifest["total_units"] += qty
+            dispatch_manifest["total_cartons"] += cartons
+            dispatch_manifest["total_chargeable_weight_kg"] += weight
+
+            transaction.on_commit(lambda s=product.sku: sync_channel_inventory_task.delay(sku=s))
+
+        dispatch_manifest["total_cartons"] = float(dispatch_manifest["total_cartons"])
+        dispatch_manifest["total_chargeable_weight_kg"] = float(dispatch_manifest["total_chargeable_weight_kg"])
+
+        AuditService.log(
+            action=AuditAction.GATE_PASS_ISSUED,
+            entity_type='DispatchGatePass',
+            entity_id=dispatch_manifest['gate_pass_number'],
+            actor=user,
+            post_snapshot={
+                "dispatch_reference": dispatch_reference,
+                "total_units": dispatch_manifest["total_units"],
+                "total_cartons": dispatch_manifest["total_cartons"],
+                "lr_number": lr_number
+            }
+        )
+
+        return dispatch_manifest
+
+    @classmethod
+    @transaction.atomic
+    def set_batch_quarantine(cls, batch_id: str, quarantine: bool, reason: str, user=None) -> dict:
+        """
+        Toggles quarantine status of a formulation lot and logs an immutable audit event.
+        Quarantined lots are immediately excluded from sellable inventory and FEFO routing.
+        """
+        try:
+            batch = Batch.objects.select_for_update().get(batch_id=batch_id)
+        except Batch.DoesNotExist:
+            raise ValueError(f"Batch with ID '{batch_id}' not found.")
+
+        old_status = batch.quarantine_status
+        batch.quarantine_status = quarantine
+        if reason:
+            prefix = "[QUARANTINED]" if quarantine else "[RELEASED]"
+            batch.formulation_notes = f"{prefix} {reason.strip()} | {batch.formulation_notes or ''}".strip()
+        batch.save(update_fields=['quarantine_status', 'formulation_notes'])
+
+        AuditService.log(
+            action=AuditAction.BATCH_EXPIRY_OVERRIDE,
+            entity_type='Batch',
+            entity_id=batch.batch_id,
+            actor=user,
+            pre_snapshot={"quarantine_status": old_status},
+            post_snapshot={"quarantine_status": quarantine},
+            metadata={"reason": reason, "sku": batch.product_id}
+        )
+
+        # Trigger async marketplace stock synchronization because sellable stock changed
+        transaction.on_commit(lambda: sync_channel_inventory_task.delay(sku=batch.product_id))
+
+        return {
+            "status": "SUCCESS",
+            "batch_id": batch.batch_id,
+            "product_sku": batch.product_id,
+            "quarantine_status": batch.quarantine_status,
+            "is_sellable_fefo": batch.is_sellable_fefo,
+            "notes": batch.formulation_notes
+        }
+
+    @classmethod
+    def get_batch_traceability(cls, batch_id: str) -> dict:
+        """
+        Full lot genealogy and warehouse distribution for regulatory cosmetic compliance.
+        """
+        try:
+            batch = Batch.objects.select_related('product').get(batch_id=batch_id)
+        except Batch.DoesNotExist:
+            raise ValueError(f"Batch '{batch_id}' does not exist.")
+
+        ledgers = InventoryLedger.objects.filter(batch=batch).select_related('location')
+        locations = []
+        total_qty = 0
+        for l in ledgers:
+            loc = l.location
+            bin_str = f", Bin {loc.bin}" if loc.bin else ""
+            locations.append({
+                "location_id": str(loc.id),
+                "warehouse": loc.warehouse,
+                "shelf_code": f"{loc.warehouse}:{loc.aisle}-{loc.row}-{loc.shelf}{bin_str}",
+                "quantity": l.quantity
+            })
+            total_qty += l.quantity
+
+        recent_logs = (
+            TransactionLog.objects.filter(batch=batch)
+            .order_by('-timestamp')[:10]
+            .values('id', 'timestamp', 'quantity_change', 'transaction_type', 'source', 'reason_code')
+        )
+
+        return {
+            "batch_id": batch.batch_id,
+            "product": {
+                "sku": batch.product.sku,
+                "name": batch.product.name,
+                "category": batch.product.category,
+                "skincare_line": batch.product.skincare_line,
+                "mineral_actives": batch.product.mineral_actives,
+                "packaging_format": batch.product.packaging_format,
+                "hsn_code": batch.product.hsn_code,
+            },
+            "mfg_date": batch.mfg_date.isoformat(),
+            "expiry_date": batch.expiry_date.isoformat(),
+            "days_to_expiry": batch.days_to_expiry,
+            "is_expired": batch.is_expired,
+            "is_near_expiry": batch.is_near_expiry,
+            "quarantine_status": batch.quarantine_status,
+            "is_sellable_fefo": batch.is_sellable_fefo,
+            "compliance_certificate_number": batch.compliance_certificate_number,
+            "coa_document_url": batch.coa_document.url if batch.coa_document else None,
+            "total_inventory_units": total_qty,
+            "locations": locations,
+            "recent_ledger_movements": list(recent_logs)
         }
 
     @classmethod
