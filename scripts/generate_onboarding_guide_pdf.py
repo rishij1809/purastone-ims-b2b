@@ -2,7 +2,6 @@ import os
 import sys
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether, HRFlowable
@@ -34,7 +33,7 @@ class NumberedCanvas(canvas.Canvas):
 
         # Header (Pages 2+)
         if self._pageNumber > 1:
-            self.drawString(36, A4[1] - 25, "PURA STONE ENTERPRISE ERP — REAL DATA & SYSTEM INTEGRATION SPECIFICATION")
+            self.drawString(36, A4[1] - 25, "PURA STONE ENTERPRISE ERP — MASTER ONBOARDING, API KEYS & HOSTING GUIDE")
             self.drawRightString(A4[0] - 36, A4[1] - 25, "CONFIDENTIAL & PROPRIETARY")
             self.setStrokeColor(colors.HexColor("#cbd5e1"))
             self.setLineWidth(0.5)
@@ -44,7 +43,7 @@ class NumberedCanvas(canvas.Canvas):
         self.setStrokeColor(colors.HexColor("#cbd5e1"))
         self.setLineWidth(0.5)
         self.line(36, 32, A4[0] - 36, 32)
-        self.drawString(36, 20, "Pura Stone Mineral Skincare — Executive Implementation & Data Onboarding Guide")
+        self.drawString(36, 20, "Pura Stone Mineral Skincare — Executive Implementation, API Manual & Hosting Handover")
         self.drawRightString(A4[0] - 36, 20, f"Page {self._pageNumber} of {page_count}")
         self.restoreState()
 
@@ -61,13 +60,13 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
 
     styles = getSampleStyleSheet()
 
-    # Custom styles
+    # Typography & Color Styles
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=20,
-        leading=24,
+        fontSize=18,
+        leading=22,
         textColor=colors.HexColor("#0f172a"),
         spaceAfter=4
     )
@@ -76,21 +75,33 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
         'DocSubTitle',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=10,
-        leading=14,
+        fontSize=9.5,
+        leading=13.5,
         textColor=colors.HexColor("#475569"),
-        spaceAfter=12
+        spaceAfter=10
     )
 
     h1_style = ParagraphStyle(
         'SectionHeading1',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=12,
-        leading=16,
+        fontSize=11.5,
+        leading=15,
         textColor=colors.HexColor("#0f766e"), # Pura Stone Teal
-        spaceBefore=12,
-        spaceAfter=6,
+        spaceBefore=11,
+        spaceAfter=5,
+        keepWithNext=True
+    )
+
+    h2_style = ParagraphStyle(
+        'SectionHeading2',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9.5,
+        leading=12.5,
+        textColor=colors.HexColor("#1e293b"),
+        spaceBefore=8,
+        spaceAfter=3,
         keepWithNext=True
     )
 
@@ -98,26 +109,17 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
         'BodyDark',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8.5,
-        leading=11.5,
+        fontSize=8,
+        leading=11,
         textColor=colors.HexColor("#1e293b")
-    )
-
-    bold_body_style = ParagraphStyle(
-        'BoldBodyDark',
-        parent=styles['Normal'],
-        fontName='Helvetica-Bold',
-        fontSize=8.5,
-        leading=11.5,
-        textColor=colors.HexColor("#0f172a")
     )
 
     table_header_style = ParagraphStyle(
         'TableHeader',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=8,
-        leading=10,
+        fontSize=7.5,
+        leading=9.5,
         textColor=colors.white
     )
 
@@ -125,8 +127,8 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
         'TableCell',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=7.5,
-        leading=10,
+        fontSize=7,
+        leading=9.2,
         textColor=colors.HexColor("#1e293b")
     )
 
@@ -134,8 +136,8 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
         'TableCellBold',
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
-        fontSize=7.5,
-        leading=10,
+        fontSize=7,
+        leading=9.2,
         textColor=colors.HexColor("#0f172a")
     )
 
@@ -143,8 +145,8 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
         'TableCellCode',
         parent=styles['Normal'],
         fontName='Courier',
-        fontSize=7,
-        leading=9,
+        fontSize=6.5,
+        leading=8.5,
         textColor=colors.HexColor("#0f766e")
     )
 
@@ -152,102 +154,184 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
         'CalloutText',
         parent=styles['Normal'],
         fontName='Helvetica',
-        fontSize=8,
-        leading=11,
+        fontSize=7.8,
+        leading=10.8,
         textColor=colors.HexColor("#0369a1")
+    )
+
+    alert_style = ParagraphStyle(
+        'AlertText',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=7.8,
+        leading=10.8,
+        textColor=colors.HexColor("#92400e")
+    )
+
+    green_callout_style = ParagraphStyle(
+        'GreenCalloutText',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=7.8,
+        leading=10.8,
+        textColor=colors.HexColor("#166534")
     )
 
     story = []
 
     # Title Banner
     story.append(Paragraph("PURA STONE ENTERPRISE ERP & FINANCIAL COMMAND CENTER", title_style))
-    story.append(Paragraph("<b>MASTER DATA ONBOARDING, API CREDENTIALS & INTEGRATION REQUIREMENTS SPECIFICATION</b><br/>"
-                           "<i>A comprehensive operational guide listing all API keys, master catalog tables, carrier rate cards, batch records, and financial baselines needed to connect real-world data to the live system.</i>", subtitle_style))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0f766e"), spaceAfter=10))
+    story.append(Paragraph(
+        "<b>MASTER DATA ONBOARDING, API INTEGRATION MANUAL & INFRASTRUCTURE HANDOVER SPECIFICATION</b><br/>"
+        "<i>Complete Step-by-Step API Key Generation Manual, VPS Hosting Credentials Handover, Database Plans & Pricing, Master Catalog Tables, and Financial Baseline Requirements.</i>",
+        subtitle_style
+    ))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#0f766e"), spaceAfter=8))
 
     # Executive Summary Box
     summary_html = (
-        "<b>EXECUTIVE PURPOSE & DATA PIPELINE ARCHITECTURE:</b><br/>"
-        "The Pura Stone ERP operates a unified 6-tier unit-economics and financial waterfall engine: "
+        "<b>EXECUTIVE PURPOSE & INTEGRATION ARCHITECTURE:</b><br/>"
+        "The Pura Stone ERP calculates automated real-time unit economics across a strict 6-tier waterfall: "
         "<b>GMV → Net Revenue → CM1 → CM2 → CM3 → EBITDA & Net Profit</b>. To transition from the current "
-        "synthetic demo environment to full production, the platform requires exact operational inputs across <b>8 core domains</b>: "
-        "(1) Omnichannel & Payment Gateway APIs, (2) Logistics & Government E-Way Bill APIs, (3) Digital Ad Platform APIs, "
-        "(4) Master Product & Omnichannel SKU Mapping, (5) Warehouse & FEFO Formulation Batch Inventory, "
-        "(6) B2B Wholesaler & Stockist Directory, (7) Fixed OPEX & Unit Formulation Costings, and (8) Cloud Server Environment Keys. "
-        "Each section below specifies the exact parameter names, source portals, and the precise business calculation it powers."
+        "synthetic testing environment into 100% live production, the engineering and DevOps teams require exact operational credentials and master records across <b>10 core domains</b>:<br/>"
+        "• <b>Sections 1 & 2:</b> Step-by-Step API Key Generation Guides for Shopify, Amazon SP-API, Flipkart, Razorpay, Stripe, Meta Ads, Google Ads, Logistics & GST APIs.<br/>"
+        "• <b>Section 3:</b> Production VPS Hosting Platform Handover — Required Server Credentials, Recommended Specifications & Pricing Comparison (Hostinger, Hetzner, DigitalOcean, AWS).<br/>"
+        "• <b>Section 4:</b> Production Database Services Handover — Self-Hosted PostgreSQL (₹0 Extra) vs. Managed Cloud DB (Supabase / Neon / AWS RDS) with Cost Breakdowns.<br/>"
+        "• <b>Section 5:</b> Domain, DNS & SSL Configuration Handover (Cloudflare / Registrar).<br/>"
+        "• <b>Section 6:</b> Cloud Object Storage for Invoices, LRs, and COAs (S3 / Cloudflare R2).<br/>"
+        "• <b>Sections 7–10:</b> Master Skincare Catalog, Warehouse Batch Stock, B2B Wholesaler Directory, and Fixed OPEX Baseline."
     )
     summary_table = Table([[Paragraph(summary_html, callout_style)]], colWidths=[523])
     summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f0fdfa")),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#99f6e4")),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f0f9ff")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#bae6fd")),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
     ]))
     story.append(summary_table)
     story.append(Spacer(1, 10))
 
-    # SECTION 1: Omnichannel & Payment Gateway API Credentials
-    story.append(Paragraph("1. Omnichannel Marketplace & Payment Gateway API Credentials", h1_style))
-    story.append(Paragraph("These credentials connect automated ingestion pipelines that ingest real customer orders, fees, refunds, and bank payouts.", body_style))
+    # =========================================================================
+    # SECTION 1: Step-by-Step Omnichannel & Payment API Key Generation Guide
+    # =========================================================================
+    story.append(Paragraph("1. Step-by-Step API Key Generation Guide: Omnichannel Marketplaces & Payment Gateways", h1_style))
+    story.append(Paragraph(
+        "Follow these exact step-by-step instructions in your partner dashboards to generate and provide the live production API keys required for automated order ingestion, fee reconciliation, and payment settlement.",
+        body_style
+    ))
     story.append(Spacer(1, 4))
 
     headers1 = [
-        Paragraph("Integration Domain", table_header_style),
-        Paragraph("Exact Keys / Parameters Needed", table_header_style),
-        Paragraph("Where to Obtain", table_header_style),
-        Paragraph("Operational Purpose & Business Impact", table_header_style),
+        Paragraph("Platform / Channel", table_header_style),
+        Paragraph("Required Keys & Parameters", table_header_style),
+        Paragraph("Step-by-Step Generation Instructions in Portal", table_header_style),
+        Paragraph("System Function in Pura Stone ERP", table_header_style),
     ]
 
     rows1 = [
         [
-            Paragraph("<b>Shopify D2C Store</b>", table_cell_bold),
-            Paragraph("• Store Domain (e.g. <code>purastone.myshopify.com</code>)<br/>"
-                      "• Admin API Access Token (<code>shpat_...</code>)<br/>"
-                      "• API Secret Key<br/>"
-                      "• Webhook Signing Secret", table_cell_style),
-            Paragraph("Shopify Admin → Apps → Develop Apps → Create an App → Admin API Scopes (read_orders, read_products, read_inventory)", table_cell_style),
-            Paragraph("<b>Real-time D2C Sales Ingestion:</b> Automatically captures customer orders, promo discounts, customer addresses, taxes, and triggers FEFO stock allocation upon checkout.", table_cell_style)
+            Paragraph("<b>Shopify Admin API</b><br/>(D2C Storefront)", table_cell_bold),
+            Paragraph(
+                "• <code>Admin API Access Token</code> (starts with <code>shpat_...</code>)<br/>"
+                "• <code>API Key & Secret Key</code><br/>"
+                "• <code>Store Domain</code> (e.g. <code>purastone.myshopify.com</code>)<br/>"
+                "• <code>Webhook Signing Secret</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to Shopify Admin (<code>admin.shopify.com</code>).<br/>"
+                "<b>2.</b> Go to <b>Settings</b> (bottom left gear) > <b>Apps and sales channels</b> > <b>Develop apps</b>.<br/>"
+                "<b>3.</b> Click <b>Create an app</b> > Name: <code>PuraStone ERP Integration</code>.<br/>"
+                "<b>4.</b> Click <b>Configure Admin API scopes</b> > Select: <code>read_products</code>, <code>write_products</code>, <code>read_orders</code>, <code>write_orders</code>, <code>read_inventory</code>, <code>write_inventory</code>, <code>read_fulfillments</code>, <code>read_locations</code>.<br/>"
+                "<b>5.</b> Click <b>Install app</b> > Click <b>Reveal token once</b> and immediately copy the token (it is shown only once!).<br/>"
+                "<b>6.</b> Under Webhooks, add endpoint: <code>https://api.purastone.com/api/finance/webhooks/shopify/</code> for events: <code>orders/create</code>, <code>orders/updated</code>, <code>orders/cancelled</code>.",
+                table_cell_style
+            ),
+            Paragraph("Automates real-time order pull, multi-batch FEFO inventory reduction, bundle SKU translation, and tracking number back-sync.", table_cell_style)
         ],
         [
-            Paragraph("<b>Amazon India (SP-API)</b>", table_cell_bold),
-            Paragraph("• LWA Client ID & Secret<br/>"
-                      "• SP-API Refresh Token<br/>"
-                      "• AWS IAM Role ARN & Access Key/Secret<br/>"
-                      "• Seller Merchant ID (e.g. <code>A21TJ...</code>)<br/>"
-                      "• Marketplace ID (<code>A21TJRUUN4KGV</code> for IN)", table_cell_style),
-            Paragraph("Amazon Seller Central → Partner Network → Developer Central → Register App (Orders API, Finances API, Reports API)", table_cell_style),
-            Paragraph("<b>FBA / FBM Order & Fee Reconciliation:</b> Extracts gross GMV, referral fees, closing fees, weight-handling shipping fees, and settlement UTR files to compute true CM2.", table_cell_style)
+            Paragraph("<b>Amazon SP-API</b><br/>(India Marketplace)", table_cell_bold),
+            Paragraph(
+                "• <code>LWA Client ID</code><br/>"
+                "• <code>LWA Client Secret</code><br/>"
+                "• <code>LWA Refresh Token</code><br/>"
+                "• <code>AWS Access Key & Secret</code><br/>"
+                "• <code>SP-API Role ARN</code><br/>"
+                "• <code>Marketplace ID: A21TJRUUN4KGV</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to Amazon Seller Central India (<code>sellercentral.amazon.in</code>).<br/>"
+                "<b>2.</b> Go to <b>Partner Network</b> / <b>Apps & Services</b> > <b>Develop Apps</b>.<br/>"
+                "<b>3.</b> Register a Developer Profile (Select: Pricing, Order Management, Finance & Accounting, Inventory).<br/>"
+                "<b>4.</b> Click <b>Add new app client</b> > Name: <code>PuraStone-SPAPI</code> > Select SP-API.<br/>"
+                "<b>5.</b> Copy the <b>LWA Client ID</b> and <b>LWA Client Secret</b>.<br/>"
+                "<b>6.</b> In the Developer Central list, click <b>Authorize</b> next to the app to generate the permanent <b>Refresh Token</b>.<br/>"
+                "<b>7.</b> In your AWS IAM Console, create an IAM Role with an inline policy for <code>execute-api</code>, attach to IAM user, and copy the <b>Role ARN</b> and AWS Access/Secret keys.",
+                table_cell_style
+            ),
+            Paragraph("Ingests Amazon FBA & MFN orders, referral fees, closing fees, weight-handling charges, and bi-weekly bank disbursement UTRs.", table_cell_style)
         ],
         [
-            Paragraph("<b>Flipkart Seller Platform</b>", table_cell_bold),
-            Paragraph("• Flipkart App ID / Client ID<br/>"
-                      "• App Secret Key<br/>"
-                      "• Flipkart Seller ID<br/>"
-                      "• Settlement API Bearer Token", table_cell_style),
-            Paragraph("Flipkart Seller Hub → Developer Console → Self-Serve API Integration (Orders & Post-Order Services)", table_cell_style),
-            Paragraph("<b>Marketplace Net Realization:</b> Ingests marketplace commission deductions, collection charges, pick-pack fees, and customer returns/RTO penalty deductions.", table_cell_style)
+            Paragraph("<b>Flipkart Seller API</b><br/>(Marketplace)", table_cell_bold),
+            Paragraph(
+                "• <code>Application ID (App ID)</code><br/>"
+                "• <code>Application Secret</code><br/>"
+                "• <code>OAuth Bearer / Refresh Token</code><br/>"
+                "• <code>Flipkart Seller ID</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to Flipkart Seller Hub (<code>seller.flipkart.com</code>).<br/>"
+                "<b>2.</b> Go to <b>Settings</b> > <b>API Developer Portal</b> / <b>Self-Serve Applications</b>.<br/>"
+                "<b>3.</b> Click <b>Register New Application</b> > Select scopes: <code>Orders</code>, <code>Listings</code>, <code>Returns</code>, <code>Settlements</code>.<br/>"
+                "<b>4.</b> Copy the generated <b>App ID</b> and <b>App Secret</b>.<br/>"
+                "<b>5.</b> Authorize application to retrieve the persistent OAuth Refresh Token and Seller ID.",
+                table_cell_style
+            ),
+            Paragraph("Ingests orders, platform marketplace commission deductions, collection fees, reverse RTO shipping, and NEFT payout settlement sheets.", table_cell_style)
         ],
         [
-            Paragraph("<b>Razorpay Payment Gateway</b>", table_cell_bold),
-            Paragraph("• Key ID (<code>rzp_live_...</code>)<br/>"
-                      "• Key Secret<br/>"
-                      "• Webhook Secret", table_cell_style),
-            Paragraph("Razorpay Dashboard → Settings → API Keys & Webhooks (Enable: order.paid, refund.processed, payment.captured)", table_cell_style),
-            Paragraph("<b>Transaction Fee & Payout Auditing:</b> Verifies exact MDR fee (typically 1.8%–2.2% + 18% GST), tracks payment failures, customer chargebacks, and automated bank settlement reconciliation.", table_cell_style)
+            Paragraph("<b>Razorpay Payment Gateway</b><br/>(Live Mode)", table_cell_bold),
+            Paragraph(
+                "• <code>Key ID</code> (<code>rzp_live_...</code>)<br/>"
+                "• <code>Key Secret</code><br/>"
+                "• <code>Webhook Secret</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to Razorpay Dashboard (<code>dashboard.razorpay.com</code>).<br/>"
+                "<b>2.</b> Ensure <b>Live Mode</b> toggle is activated on the top bar.<br/>"
+                "<b>3.</b> Go to <b>Settings</b> (left navigation menu) > <b>API Keys</b> tab.<br/>"
+                "<b>4.</b> Click <b>Generate Key</b> (or Regenerate Key) > Copy <b>Key ID</b> and <b>Key Secret</b>.<br/>"
+                "<b>5.</b> Go to <b>Settings</b> > <b>Webhooks</b> > Click <b>Add New Webhook</b> > Enter URL: <code>https://api.purastone.com/api/finance/webhooks/razorpay/</code> > Select active events: <code>order.paid</code>, <code>payment.captured</code>, <code>payment.failed</code>, <code>refund.processed</code> > Copy the <b>Webhook Secret</b>.",
+                table_cell_style
+            ),
+            Paragraph("Captures exact 2.0% + GST transaction fees, Net Settled payouts, payment mode splits (UPI vs Card vs Netbanking), and customer refunds.", table_cell_style)
         ],
         [
-            Paragraph("<b>Stripe Gateway (International)</b>", table_cell_bold),
-            Paragraph("• Publishable Key (<code>pk_live_...</code>)<br/>"
-                      "• Secret Key (<code>sk_live_...</code>)<br/>"
-                      "• Webhook Signing Secret (<code>whsec_...</code>)", table_cell_style),
-            Paragraph("Stripe Dashboard → Developers → API Keys & Webhooks", table_cell_style),
-            Paragraph("<b>Global Cross-Border D2C:</b> Ingests international multi-currency transactions (USD, EUR, GBP), FX conversion losses, and international gateway fees.", table_cell_style)
+            Paragraph("<b>Stripe Payment Gateway</b><br/>(Global & Domestic)", table_cell_bold),
+            Paragraph(
+                "• <code>Publishable Key</code> (<code>pk_live_...</code>)<br/>"
+                "• <code>Secret Key</code> (<code>sk_live_...</code>)<br/>"
+                "• <code>Webhook Signing Secret</code> (<code>whsec_...</code>)",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to Stripe Dashboard (<code>dashboard.stripe.com</code>).<br/>"
+                "<b>2.</b> Navigate to <b>Developers</b> (top right) > <b>API keys</b> tab.<br/>"
+                "<b>3.</b> Copy the standard <b>Publishable key</b>.<br/>"
+                "<b>4.</b> Under Secret keys, click <b>Reveal live key</b> and copy the <b>Secret key</b>.<br/>"
+                "<b>5.</b> Go to <b>Developers</b> > <b>Webhooks</b> > Click <b>Add endpoint</b> > Enter Endpoint URL: <code>https://api.purastone.com/api/finance/webhooks/stripe/</code> > Select events: <code>checkout.session.completed</code>, <code>charge.refunded</code> > Copy <b>Signing secret</b>.",
+                table_cell_style
+            ),
+            Paragraph("Calculates international transaction processing fees, cross-border currency conversion surcharges, and bank payout reconciliation.", table_cell_style)
         ]
     ]
 
-    t1 = Table([headers1] + rows1, colWidths=[85, 140, 140, 158])
+    t1 = Table([headers1] + rows1, colWidths=[90, 115, 200, 118])
     t1.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
@@ -261,54 +345,95 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
     story.append(t1)
     story.append(Spacer(1, 10))
 
-    # SECTION 2: Logistics, TMS & Statutory Government APIs
-    story.append(Paragraph("2. Logistics Carriers, Transport Management (TMS) & Statutory Portals", h1_style))
-    story.append(Paragraph("Enables automated dispatch, multi-carrier label generation, B2B Lorry Receipt (LR) tracking, and E-Way Bill generation.", body_style))
+    # =========================================================================
+    # SECTION 2: Step-by-Step Ad Platform, Logistics & Government APIs
+    # =========================================================================
+    story.append(Paragraph("2. Step-by-Step API Key Generation: Ad Networks, Logistics & GST E-Way Bill", h1_style))
+    story.append(Paragraph(
+        "Required to power CM3 attribution (Meta/Google Ad spend) and TMS freight allocation (Shiprocket/Delhivery/NIC e-Way Bill).",
+        body_style
+    ))
     story.append(Spacer(1, 4))
 
     headers2 = [
-        Paragraph("Platform / System", table_header_style),
-        Paragraph("Required Keys & Inputs", table_header_style),
-        Paragraph("Where to Obtain", table_header_style),
-        Paragraph("Operational Purpose & Business Impact", table_header_style),
+        Paragraph("Integration Service", table_header_style),
+        Paragraph("Required Keys & IDs", table_header_style),
+        Paragraph("Step-by-Step Generation Instructions in Portal", table_header_style),
+        Paragraph("System Function & Mathematical Impact", table_header_style),
     ]
 
     rows2 = [
         [
-            Paragraph("<b>D2C Aggregator (Shiprocket / Pickrr)</b>", table_cell_bold),
-            Paragraph("• API User Email & Password<br/>"
-                      "• Bearer Token (JWT)<br/>"
-                      "• Webhook Authentication Token", table_cell_style),
-            Paragraph("Shiprocket Panel → Settings → API → Configure & Generate Keys", table_cell_style),
-            Paragraph("<b>D2C Shipping & RTO Cost Allocation:</b> Auto-assigns forward courier, tracks AWB numbers, monitors transit damage, and allocates reverse shipping charges on RTO orders directly to order CM2.", table_cell_style)
+            Paragraph("<b>Meta Marketing API</b><br/>(FB & Instagram Ads)", table_cell_bold),
+            Paragraph(
+                "• <code>System User Access Token</code><br/>"
+                "• <code>Ad Account ID</code> (<code>act_...</code>)<br/>"
+                "• <code>App ID & App Secret</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Open Meta for Developers (<code>developers.facebook.com</code>) & Meta Business Suite.<br/>"
+                "<b>2.</b> Go to <b>Business Settings</b> > <b>Users</b> > <b>System Users</b> > Click <b>Add</b> (Assign Admin role).<br/>"
+                "<b>3.</b> Click <b>Assign Assets</b> > Select your Facebook Ad Account & Instagram Business Account > Toggle <b>Manage Campaigns</b>.<br/>"
+                "<b>4.</b> Click <b>Generate New Token</b> > Select App > Scopes: <code>ads_read</code>, <code>read_insights</code> > Set Token Expiration: <b>Never</b>.<br/>"
+                "<b>5.</b> Copy the generated token and your numeric <b>Ad Account ID</b>.",
+                table_cell_style
+            ),
+            Paragraph("Deducts daily Meta ad spend against D2C revenue to calculate channel-specific <b>CM3</b> and Blended ROAS.", table_cell_style)
         ],
         [
-            Paragraph("<b>Surface Couriers (Delhivery / Bluedart)</b>", table_cell_bold),
-            Paragraph("• Production API Token<br/>"
-                      "• Client Account Name / Master Pin<br/>"
-                      "• Pickup Location Name", table_cell_style),
-            Paragraph("Delhivery One Portal / Bluedart Enterprise Integration Account", table_cell_style),
-            Paragraph("<b>Heavy Cargo & Volumetric Freight:</b> Handles multi-carton surface dispatches with volumetric weight calculations and proof-of-delivery (POD) sync.", table_cell_style)
+            Paragraph("<b>Google Ads API</b><br/>(Search, PMax & YouTube)", table_cell_bold),
+            Paragraph(
+                "• <code>Developer Token</code><br/>"
+                "• <code>OAuth Client ID & Secret</code><br/>"
+                "• <code>Refresh Token</code><br/>"
+                "• <code>Customer ID</code> (<code>XXX-XXX-XXXX</code>)",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Go to Google Cloud Console (<code>console.cloud.google.com</code>) > Create Project > Enable <b>Google Ads API</b>.<br/>"
+                "<b>2.</b> Under Credentials, create <b>OAuth 2.0 Client ID</b> (Web App) > Save Client ID and Secret.<br/>"
+                "<b>3.</b> In Google Ads Manager Account (<code>ads.google.com</code>) > <b>Tools & Settings</b> > <b>API Center</b> > Copy <b>Developer Token</b>.<br/>"
+                "<b>4.</b> Complete OAuth authorization flow to generate permanent Refresh Token > Copy Google Ads Customer ID.",
+                table_cell_style
+            ),
+            Paragraph("Ingests Google performance advertising costs, linking cost-per-click to SKU conversion to determine true marketing contribution.", table_cell_style)
         ],
         [
-            Paragraph("<b>B2B Transporters (VRL / TCI / Rivigo Rate Cards)</b>", table_cell_bold),
-            Paragraph("• Transporter Master Contract Rates (per kg / per carton rate matrix)<br/>"
-                      "• Transporter GSTIN & Transporter ID<br/>"
-                      "• Contract Minimum Freight Charges & Surcharges (FOV, Hamali, Bilty)", table_cell_style),
-            Paragraph("Existing physical freight agreements & rate-card annexures with transport partners", table_cell_style),
-            Paragraph("<b>B2B Lorry Receipt (LR) Cost Engine:</b> Dynamically calculates prepaid vs to-pay freight slabs, loading charges, and transit breakage liability for wholesale dispatches.", table_cell_style)
+            Paragraph("<b>Logistics Aggregator</b><br/>(Shiprocket / Delhivery)", table_cell_bold),
+            Paragraph(
+                "• <code>API User Email & Password</code><br/>"
+                "• <code>Bearer Authentication Token</code><br/>"
+                "• <code>Account / Client Code</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to Shiprocket / Delhivery One corporate dashboard.<br/>"
+                "<b>2.</b> Go to <b>Settings</b> > <b>API</b> / <b>Integrations</b> > <b>API Details</b>.<br/>"
+                "<b>3.</b> Generate API User credentials > Copy <b>User Email</b> and <b>API Password</b> (or permanent API Token).",
+                table_cell_style
+            ),
+            Paragraph("Pulls forward shipping charges, RTO reverse penalty costs, COD collection fees, and proof of delivery (POD) tracking.", table_cell_style)
         ],
         [
-            Paragraph("<b>E-Way Bill & E-Invoice Portal (NIC / GSP)</b>", table_cell_bold),
-            Paragraph("• GSP Client ID & Client Secret (ClearTax, Masters India, or NIC)<br/>"
-                      "• E-Way Bill Portal Username & Password<br/>"
-                      "• E-Invoice Portal API Credentials", table_cell_style),
-            Paragraph("ewaybillgst.gov.in & einvoice1.gst.gov.in → API Registration → GSP Selection", table_cell_style),
-            Paragraph("<b>Statutory GST Compliance:</b> Automatically generates 12-digit E-Way Bill numbers and IRN QR codes on B2B invoices exceeding ₹50,000 threshold prior to vehicle dispatch.", table_cell_style)
+            Paragraph("<b>GST e-Way Bill & E-Invoice</b><br/>(NIC Portal / GSP)", table_cell_bold),
+            Paragraph(
+                "• <code>GSP User ID & Password</code><br/>"
+                "• <code>GSP Client ID & Secret</code><br/>"
+                "• <code>Company GSTIN</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>1.</b> Log in to National e-Way Bill Portal (<code>ewaybillgst.gov.in</code>).<br/>"
+                "<b>2.</b> Go to <b>Registration</b> > <b>For GSP</b> > Register GSP User Credentials.<br/>"
+                "<b>3.</b> If using an authorized GSP partner (ClearTax/Masters India), copy their Client ID & Secret credentials.",
+                table_cell_style
+            ),
+            Paragraph("Automates generation of statutory e-Way Bills and QR-code IRN e-invoices for B2B wholesale consignments exceeding ₹50,000.", table_cell_style)
         ]
     ]
 
-    t2 = Table([headers2] + rows2, colWidths=[85, 140, 140, 158])
+    t2 = Table([headers2] + rows2, colWidths=[90, 115, 200, 118])
     t2.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
@@ -322,461 +447,671 @@ def build_pdf(filename="PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"):
     story.append(t2)
     story.append(Spacer(1, 10))
 
-    # SECTION 3: Advertising Networks for CM3 & ROAS
-    story.append(Paragraph("3. Digital Advertising Platforms (Automated CM3 & Blended CAC)", h1_style))
-    story.append(Paragraph("Automates daily marketing spend synchronization to compute accurate Contribution Margin 3 (CM3) without manual spreadsheets.", body_style))
+    # =========================================================================
+    # SECTION 3: Production VPS Hosting Server Handover & Plan Recommendations
+    # =========================================================================
+    story.append(Paragraph("3. Production VPS Hosting Server Handover & Plan Recommendations", h1_style))
+    story.append(Paragraph(
+        "To deploy and host your Pura Stone ERP, background task scheduler (Celery/Redis), and automated database backups with 99.9% uptime, "
+        "the engineering team requires administrative access to your VPS hosting platform.",
+        body_style
+    ))
     story.append(Spacer(1, 4))
 
-    headers3 = [
-        Paragraph("Ad Platform", table_header_style),
-        Paragraph("Required Keys & Identifiers", table_header_style),
-        Paragraph("Where to Obtain", table_header_style),
-        Paragraph("Operational Purpose & Business Impact", table_header_style),
-    ]
-
-    rows3 = [
-        [
-            Paragraph("<b>Meta Ads (Facebook & Instagram)</b>", table_cell_bold),
-            Paragraph("• System User Access Token (Never-expiring)<br/>"
-                      "• Meta Ad Account ID (<code>act_...</code>)<br/>"
-                      "• Meta Pixel ID & Conversion API Key", table_cell_style),
-            Paragraph("business.facebook.com → Business Settings → System Users → Generate Token (ads_read, ads_management)", table_cell_style),
-            Paragraph("<b>D2C Customer Acquisition Cost (CAC):</b> Syncs daily D2C ad spend per skincare line (Serum, Cleanser, Alum) to deduce CM3 and Blended ROAS.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Google Ads (Search, Shopping & PMax)</b>", table_cell_bold),
-            Paragraph("• Developer Token<br/>"
-                      "• OAuth2 Client ID & Client Secret<br/>"
-                      "• Refresh Token<br/>"
-                      "• Google Ads Customer ID (<code>xxx-xxx-xxxx</code>)", table_cell_style),
-            Paragraph("Google Cloud Console (Project APIs) & Google Ads Manager Account (MCC) → Tools → API Center", table_cell_style),
-            Paragraph("<b>Search Intent & Conversion Attribution:</b> Tracks Google Shopping & Performance Max ad spend against high-intent mineral skincare search queries.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Amazon / Flipkart Sponsored Ads</b>", table_cell_bold),
-            Paragraph("• Amazon Advertising API Profile ID & Token<br/>"
-                      "• Flipkart PLA / PCA Ad Account ID", table_cell_style),
-            Paragraph("advertising.amazon.in & Flipkart Advertising Panel", table_cell_style),
-            Paragraph("<b>Marketplace Advertising (ACOS/TACOS):</b> Allocates marketplace sponsored product ad costs directly to Amazon/Flipkart CM3 calculations.", table_cell_style)
-        ]
-    ]
-
-    t3 = Table([headers3] + rows3, colWidths=[85, 140, 140, 158])
-    t3.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-    ]))
-    story.append(t3)
-    story.append(PageBreak())
-
-    # SECTION 4: Master Skincare Catalog & Omnichannel SKU Directory
-    story.append(Paragraph("4. Master Mineral Skincare Catalog & SKU Mapping Directory (Excel / CSV)", h1_style))
-    story.append(Paragraph("The central master directory of all Pura Stone formulations, barcodes, physical dimensions, and wholesale pricing structures.", body_style))
-    story.append(Spacer(1, 4))
-
-    headers4 = [
-        Paragraph("Field Name", table_header_style),
-        Paragraph("Data Type / Format", table_header_style),
-        Paragraph("Example Value", table_header_style),
-        Paragraph("Why Required & How the ERP Uses It", table_header_style),
-    ]
-
-    rows4 = [
-        [
-            Paragraph("<b>sku</b>", table_cell_code),
-            Paragraph("String (Unique ID)", table_cell_style),
-            Paragraph("<code>PURA-SERUM-50ML</code>", table_cell_code),
-            Paragraph("Primary identifier for all inventory transactions, batch allocations, and invoice lines.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>name</b>", table_cell_code),
-            Paragraph("String (Max 255)", table_cell_style),
-            Paragraph("Mineral Glow Facial Serum 50ml", table_cell_style),
-            Paragraph("Commercial display name printed on GST invoices, packing lists, and carton labels.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>category</b>", table_cell_code),
-            Paragraph("Enum Choice", table_cell_style),
-            Paragraph("<code>SERUM</code>, <code>CLAY_MASK</code>, <code>MINERAL_CLEANSER</code>", table_cell_code),
-            Paragraph("Categorizes product lines for analytics, inventory valuation, and category margin analysis.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>skincare_line</b>", table_cell_code),
-            Paragraph("Enum Choice", table_cell_style),
-            Paragraph("<code>MINERAL_GLOW</code>, <code>PURA_ALUM_WELLNESS</code>", table_cell_code),
-            Paragraph("Groups formulations into brand lines for marketing attribution and CEO reporting.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>mineral_actives</b>", table_cell_code),
-            Paragraph("String", table_cell_style),
-            Paragraph("Potassium Alum, Kaolin Clay, Zinc Oxide", table_cell_style),
-            Paragraph("Product specifications displayed in B2B catalog and wholesale portal.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>packaging_format</b>", table_cell_code),
-            Paragraph("String", table_cell_style),
-            Paragraph("50ml Glass Dropper Bottle with Mono-Carton", table_cell_style),
-            Paragraph("Packaging specifications used by warehouse staff for packing verification.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>barcode_ean13_upc</b>", table_cell_code),
-            Paragraph("13-digit Barcode", table_cell_style),
-            Paragraph("<code>8901234567890</code>", table_cell_code),
-            Paragraph("Scanned by warehouse barcode scanners during intake, pick/pack, and dispatch audits.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>hsn_code</b>", table_cell_code),
-            Paragraph("8-digit Code", table_cell_style),
-            Paragraph("<code>33049990</code> (Skincare)", table_cell_code),
-            Paragraph("Mandatory statutory HSN code required on GST tax invoices and E-Way bills (18% GST).", table_cell_style)
-        ],
-        [
-            Paragraph("<b>dead_weight_kg</b>", table_cell_code),
-            Paragraph("Decimal (3 places)", table_cell_style),
-            Paragraph("<code>0.180</code> (180 grams)", table_cell_code),
-            Paragraph("Physical gross scale weight used by TMS to calculate courier freight slabs.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>length_cm, width_cm, height_cm</b>", table_cell_code),
-            Paragraph("Decimal (cm)", table_cell_style),
-            Paragraph("<code>4.5 x 4.5 x 12.0</code>", table_cell_code),
-            Paragraph("Computes volumetric weight <code>(L*W*H)/5000</code> to prevent courier freight billing penalties.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>inner_pack_count</b>", table_cell_code),
-            Paragraph("Integer", table_cell_style),
-            Paragraph("<code>6</code> units", table_cell_code),
-            Paragraph("Inner shrink-wrap pack size for wholesale handling.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>master_carton_qty</b>", table_cell_code),
-            Paragraph("Integer", table_cell_style),
-            Paragraph("<code>24</code> units", table_cell_code),
-            Paragraph("Master shipping carton capacity. Governs volume slab discounts and freight containerization.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>base_price (MRP)</b>", table_cell_code),
-            Paragraph("Decimal (₹)", table_cell_style),
-            Paragraph("<code>1200.00</code>", table_cell_code),
-            Paragraph("Maximum Retail Price printed on packaging. Base anchor for PTR/PTS discount calculations.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>default_b2b_price (PTR)</b>", table_cell_code),
-            Paragraph("Decimal (₹)", table_cell_style),
-            Paragraph("<code>900.00</code> (25% off MRP)", table_cell_code),
-            Paragraph("Standard wholesale baseline Price-to-Retailer before volume slab discounts.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>base_cost (COGS)</b>", table_cell_code),
-            Paragraph("Decimal (₹)", table_cell_style),
-            Paragraph("<code>300.00</code>", table_cell_code),
-            Paragraph("Total landed formulation + primary packaging cost. Strictly protects negative margin floor.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Shopify / Amazon / Flipkart Mapping</b>", table_cell_code),
-            Paragraph("External IDs", table_cell_style),
-            Paragraph("Variant: <code>4589211</code><br/>ASIN: <code>B09XYZ...</code><br/>FSN: <code>SKCFA...</code>", table_cell_code),
-            Paragraph("Omnichannel SKU cross-referencing table so external marketplace orders decrement correct inventory.", table_cell_style)
-        ]
-    ]
-
-    t4 = Table([headers4] + rows4, colWidths=[90, 80, 115, 238])
-    t4.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-    ]))
-    story.append(t4)
-    story.append(Spacer(1, 10))
-
-    # SECTION 5: Physical Warehouse Locations & Live Batch Traceability
-    story.append(Paragraph("5. Physical Warehouse Locations & FEFO Formulation Batch Registry", h1_style))
-    story.append(Paragraph("Powers the First-Expired, First-Out (FEFO) warehouse picking engine, near-expiry alerts, and batch quarantine controls.", body_style))
-    story.append(Spacer(1, 4))
-
-    headers5 = [
-        Paragraph("Data Element", table_header_style),
-        Paragraph("Required Inputs", table_header_style),
-        Paragraph("Format / Standard", table_header_style),
-        Paragraph("Operational Purpose & Business Impact", table_header_style),
-    ]
-
-    rows5 = [
-        [
-            Paragraph("<b>Warehouse Topology</b>", table_cell_bold),
-            Paragraph("• Warehouse Name/Code<br/>"
-                      "• Aisle Identifier (e.g. A1, A2)<br/>"
-                      "• Rack / Row Number (e.g. R01)<br/>"
-                      "• Shelf Level (e.g. S01, S02)<br/>"
-                      "• Bin Code (optional)", table_cell_style),
-            Paragraph("Physical warehouse layout mapping (CSV or Excel)", table_cell_style),
-            Paragraph("<b>Exact Bin Routing:</b> Generates precise warehouse pick-paths for dispatch staff to eliminate stock misplacement and speed up order fulfillment.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Live Formulation Batches</b>", table_cell_bold),
-            Paragraph("• Batch / Lot Number (e.g. <code>BATCH-2026-ALUM-01</code>)<br/>"
-                      "• SKU Code<br/>"
-                      "• Manufacturing Date (<code>mfg_date</code>)<br/>"
-                      "• Expiry Date (<code>expiry_date</code>)<br/>"
-                      "• Formulated Shelf Life (e.g. 730 days / 24 months)", table_cell_style),
-            Paragraph("Production Batch Logs from manufacturing unit / contract manufacturer", table_cell_style),
-            Paragraph("<b>Strict FEFO Allocation:</b> Guarantees older batches nearing expiry are dispatched first. Automatically flags near-expiry batches (≤ 90 days) and locks expired stock.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Compliance & Quality Control (COA)</b>", table_cell_bold),
-            Paragraph("• Certificate of Analysis (COA) PDF files<br/>"
-                      "• Microbial & Heavy Metal Testing Lab Certificate IDs<br/>"
-                      "• Quarantine Status (True / False)", table_cell_style),
-            Paragraph("NABL-accredited cosmetic lab testing reports", table_cell_style),
-            Paragraph("<b>Regulatory & Quarantine Protection:</b> Batches flagged in quarantine cannot be allocated to orders until QA manager releases them with an immutable audit log entry.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Current Physical Stock Count</b>", table_cell_bold),
-            Paragraph("• Exact count of undamaged, sealed units per Batch at each Warehouse Location", table_cell_style),
-            Paragraph("Physical inventory stock audit count sheet", table_cell_style),
-            Paragraph("<b>Initial Ledger Baseline:</b> Populates the source-of-truth <code>InventoryLedger</code> table and synchronizes sellable quantities to Shopify, Amazon, and Flipkart.", table_cell_style)
-        ]
-    ]
-
-    t5 = Table([headers5] + rows5, colWidths=[90, 135, 120, 178])
-    t5.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-    ]))
-    story.append(t5)
-    story.append(PageBreak())
-
-    # SECTION 6: B2B Wholesaler, Stockist & Distributor Registry
-    story.append(Paragraph("6. B2B Wholesaler, Stockist & Retailer Profile Directory", h1_style))
-    story.append(Paragraph("Powers B2B wholesale pricing, credit risk governance, tiered volume discounts, and GST-compliant B2B invoices.", body_style))
-    story.append(Spacer(1, 4))
-
-    headers6 = [
-        Paragraph("Wholesale Field", table_header_style),
-        Paragraph("Specification & Required Details", table_header_style),
-        Paragraph("Example Data", table_header_style),
-        Paragraph("Operational Purpose & Business Impact", table_header_style),
-    ]
-
-    rows6 = [
-        [
-            Paragraph("<b>Entity Name & Trade Name</b>", table_cell_bold),
-            Paragraph("Full legal entity name matching GST registration certificate", table_cell_style),
-            Paragraph("Glow & Pure Wellness Retail LLP", table_cell_style),
-            Paragraph("Printed on B2B GST Tax Invoices and Delivery Challans.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>GSTIN (15 characters)</b>", table_cell_bold),
-            Paragraph("Statutory 15-digit alphanumeric Indian GSTIN", table_cell_style),
-            Paragraph("<code>27AAPFU0939F1ZV</code>", table_cell_code),
-            Paragraph("Enforces GST portal verification, determines CGST+SGST vs IGST tax split, and qualifies B2B e-Invoices.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Trade & Cosmetic Licenses</b>", table_cell_bold),
-            Paragraph("• State Shop & Establishment License<br/>"
-                      "• Cosmetic Wholesale License (Form 20B/21B)", table_cell_style),
-            Paragraph("<code>MH-FDA-20B-78812</code>", table_cell_code),
-            Paragraph("Compliance verification under Indian Drugs and Cosmetics Act for cosmetic wholesale distribution.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Billing & Delivery Coordinates</b>", table_cell_bold),
-            Paragraph("Registered billing address and physical warehouse delivery address with PIN code", table_cell_style),
-            Paragraph("Bhiwandi Logistics Park, Unit 12, Thane, MH - 421302", table_cell_style),
-            Paragraph("Required for e-Way Bill generation, distance-based freight slabs, and delivery dispatch.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Wholesale Tier</b>", table_cell_bold),
-            Paragraph("Categorization: <code>RETAILER</code>, <code>STOCKIST</code>, <code>SUPER_STOCKIST</code>, <code>INSTITUTIONAL</code>", table_cell_style),
-            Paragraph("<code>STOCKIST</code>", table_cell_code),
-            Paragraph("Determines whether standard PTR (e.g. 25% margin) or super-stockist PTS (e.g. 40% margin) applies.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Credit Limit & Period</b>", table_cell_bold),
-            Paragraph("Approved maximum outstanding balance (₹) and repayment window (days)", table_cell_style),
-            Paragraph("Limit: ₹5,00,000<br/>Period: 45 days", table_cell_style),
-            Paragraph("Blocks order confirmation if wholesaler exceeds credit threshold or has overdue unpaid invoices.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Invoice Discount Preferences</b>", table_cell_bold),
-            Paragraph("• Discount Mode (Percentage vs Flat ₹)<br/>"
-                      "• Show Discount on Invoice (True / False)", table_cell_style),
-            Paragraph("<code>PERCENTAGE</code>, <code>True</code>", table_cell_code),
-            Paragraph("Controls whether trade/promotional discounts are itemized on the commercial invoice PDF.", table_cell_style)
-        ]
-    ]
-
-    t6 = Table([headers6] + rows6, colWidths=[90, 135, 120, 178])
-    t6.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-    ]))
-    story.append(t6)
-    story.append(Spacer(1, 10))
-
-    # SECTION 7: Financial Accounting Baseline & Fixed OPEX Ledger
-    story.append(Paragraph("7. Financial Cost Accounting Baseline & Fixed OPEX Ledger", h1_style))
-    story.append(Paragraph("Enables exact 6-tier P&L math: Formulation COGS (CM1), Logistics & Platform fees (CM2), Ad Spend (CM3), and Fixed OPEX (EBITDA).", body_style))
-    story.append(Spacer(1, 4))
-
-    headers7 = [
-        Paragraph("Cost Component", table_header_style),
-        Paragraph("Required Breakdown & Source", table_header_style),
-        Paragraph("Typical Values / Frequency", table_header_style),
-        Paragraph("Impact on CEO Financial Command Center", table_header_style),
-    ]
-
-    rows7 = [
-        [
-            Paragraph("<b>Itemized Unit Formulation COGS</b>", table_cell_bold),
-            Paragraph("Per-SKU Bill of Materials (BOM):<br/>"
-                      "• Active bulk mineral ingredients cost<br/>"
-                      "• Primary packaging (glass dropper, pump, tube)<br/>"
-                      "• Mono-carton, label sticker, induction foil<br/>"
-                      "• Inward raw material transport cost", table_cell_style),
-            Paragraph("Serum: ₹300/unit<br/>Cleanser: ₹180/unit<br/>Alum Stick: ₹120/unit", table_cell_style),
-            Paragraph("<b>CM1 Calculation:</b> Landed COGS is locked immutably at dispatch to compute true Gross Margin and protect the absolute cost floor.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Secondary & Outer Packaging</b>", table_cell_bold),
-            Paragraph("Cost per dispatch:<br/>"
-                      "• Corrugated master shipper carton<br/>"
-                      "• Bubble wrap, kraft honeycomb paper<br/>"
-                      "• Pura Stone branded tamper-evident security tape", table_cell_style),
-            Paragraph("D2C: ₹15–₹25/order<br/>B2B Carton: ₹45–₹65/carton", table_cell_style),
-            Paragraph("<b>CM2 Packaging Overheads:</b> Automatically added to variable fulfillment cost on every dispatched package.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>Monthly Fixed OPEX Ledger</b>", table_cell_bold),
-            Paragraph("Itemized monthly operating expenses:<br/>"
-                      "• Executive & Staff Payroll (Salaries, PF, ESI)<br/>"
-                      "• Warehouse & Office Rent / Lease agreements<br/>"
-                      "• SaaS Subscriptions (Shopify, ERP, AWS, Klaviyo)<br/>"
-                      "• Utilities (Electricity, High-speed internet)<br/>"
-                      "• Legal, Regulatory & CA Audit Retainers", table_cell_style),
-            Paragraph("Monthly Ledger entries (e.g. ₹8,50,000 / month)", table_cell_style),
-            Paragraph("<b>EBITDA & Cash Runway:</b> Deducts fixed operational burn from CM3 to produce true monthly EBITDA, Net Profit, and Net Cash Flow runway in months.", table_cell_style)
-        ],
-        [
-            Paragraph("<b>FEFO Batch Write-Offs & Wastage</b>", table_cell_bold),
-            Paragraph("Cost records of expired batches, transit breakage, R&D formulation pilot batches, or quality rejects", table_cell_style),
-            Paragraph("Logged on incident occurrence with photo evidence", table_cell_style),
-            Paragraph("<b>Loss & Leakage Accounting:</b> Separates inventory write-offs from order fulfillment so product margins are not falsely distorted.", table_cell_style)
-        ]
-    ]
-
-    t7 = Table([headers7] + rows7, colWidths=[90, 135, 120, 178])
-    t7.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-    ]))
-    story.append(t7)
-    story.append(Spacer(1, 10))
-
-    # SECTION 8: Production Server Infrastructure Environment Variables
-    story.append(Paragraph("8. Production Infrastructure & Cloud Environment Variables (.env)", h1_style))
-    story.append(Paragraph("Required to configure production database clustering, Redis asynchronous task processing, and document storage.", body_style))
-    story.append(Spacer(1, 4))
-
-    headers8 = [
-        Paragraph("Environment Variable", table_header_style),
-        Paragraph("Expected Format / Security Level", table_header_style),
-        Paragraph("Infrastructure Provider", table_header_style),
-        Paragraph("System Function & Purpose", table_header_style),
-    ]
-
-    rows8 = [
-        [
-            Paragraph("<code>DATABASE_URL</code>", table_cell_code),
-            Paragraph("<code>postgres://user:pass@host:5432/purastone_db</code>", table_cell_code),
-            Paragraph("AWS RDS / Supabase / Neon / Local PostgreSQL 16", table_cell_style),
-            Paragraph("Primary high-availability transactional database storing all inventory, orders, and ledgers.", table_cell_style)
-        ],
-        [
-            Paragraph("<code>REDIS_URL</code>", table_cell_code),
-            Paragraph("<code>redis://:auth_token@host:6379/0</code>", table_cell_code),
-            Paragraph("Upstash / AWS ElastiCache / Redis Cloud", table_cell_style),
-            Paragraph("Message broker for Celery async tasks: PDF invoice rendering, marketplace stock sync, and daily backups.", table_cell_style)
-        ],
-        [
-            Paragraph("<code>AWS_S3_MEDIA_BUCKET</code>", table_cell_code),
-            Paragraph("Bucket Name, Access Key ID, Secret Access Key", table_cell_code),
-            Paragraph("Amazon S3 / Cloudflare R2 / MinIO", table_cell_style),
-            Paragraph("AES-256 encrypted object storage for generated Tax Invoice PDFs, COA compliance documents, and signed LRs.", table_cell_style)
-        ],
-        [
-            Paragraph("<code>SECRET_KEY & ALLOWED_HOSTS</code>", table_cell_code),
-            Paragraph("64-char crypto string & domain list", table_cell_code),
-            Paragraph("Production Server Settings", table_cell_style),
-            Paragraph("Cryptographic signing of JWT tokens, CSRF protection, and authorized host domain filtering.", table_cell_style)
-        ]
-    ]
-
-    t8 = Table([headers8] + rows8, colWidths=[95, 130, 120, 178])
-    t8.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-    ]))
-    story.append(t8)
-    story.append(Spacer(1, 12))
-
-    # Action Checklist Summary Box
-    checklist_html = (
-        "<b>NEXT OPERATIONAL ACTION STEPS FOR PURA STONE TEAM:</b><br/>"
-        "<b>Step 1:</b> Export existing SKU directory with dimensions, barcodes, MRP, PTR, and formulation COGS into Excel/CSV.<br/>"
-        "<b>Step 2:</b> Conduct physical stock take to record current unit counts by Batch ID, Mfg Date, and Expiry Date.<br/>"
-        "<b>Step 3:</b> Gather verified GSTIN certificates, wholesale licenses, and credit limits for existing retail stockists.<br/>"
-        "<b>Step 4:</b> Generate API keys from Shopify, Amazon SP-API, and Razorpay partner dashboards as detailed in Section 1.<br/>"
-        "<b>Step 5:</b> Provide monthly OPEX figures (Rent, Payroll, SaaS) to activate real-time EBITDA and Cash Runway tracking."
+    vps_alert_html = (
+        "<b>ACTION REQUIRED FROM PURA STONE TEAM:</b><br/>"
+        "Please provide the <b>Login ID (Email/Username) and Password</b> for your Cloud VPS hosting provider, "
+        "OR create an account with one of the recommended providers below and share server SSH access:<br/>"
+        "• <b>Hosting Control Panel URL</b> (e.g., Hostinger / Hetzner / DigitalOcean dashboard)<br/>"
+        "• <b>Account Username & Password</b> (or invite <code>dev@purastone.com</code> / our technical team as Admin)<br/>"
+        "• <b>Server IP Address & SSH Port</b> (Default: Port 22)<br/>"
+        "• <b>Root Username & Password</b> (or SSH Public Key access)<br/>"
+        "• <b>Target Operating System:</b> <b>Ubuntu 22.04 LTS or 24.04 LTS (64-bit)</b>"
     )
-    checklist_table = Table([[Paragraph(checklist_html, body_style)]], colWidths=[523])
-    checklist_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#0f766e")),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('LEFTPADDING', (0, 0), (-1, -1), 10),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+    vps_alert_table = Table([[Paragraph(vps_alert_html, alert_style)]], colWidths=[523])
+    vps_alert_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#fffbeb")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#fde68a")),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
     ]))
-    story.append(checklist_table)
+    story.append(vps_alert_table)
+    story.append(Spacer(1, 6))
+
+    story.append(Paragraph("Recommended VPS Hosting Plans & Pricing Comparison for Pura Stone ERP:", h2_style))
+
+    headers_vps = [
+        Paragraph("Hosting Provider", table_header_style),
+        Paragraph("Recommended Plan & Specs", table_header_style),
+        Paragraph("Estimated Monthly Pricing", table_header_style),
+        Paragraph("Data Center & Architecture Fit for Pura Stone", table_header_style),
+    ]
+
+    rows_vps = [
+        [
+            Paragraph("<b>Hostinger VPS</b><br/>(Top Recommended for India)", table_cell_bold),
+            Paragraph(
+                "<b>Plan: KVM 2 (Recommended Baseline)</b><br/>"
+                "• 2 vCPU Cores<br/>"
+                "• 8 GB RAM<br/>"
+                "• 100 GB NVMe Disk Space<br/>"
+                "• 8 TB Bandwidth<br/>"
+                "• 1 Dedicated IPv4 Address",
+                table_cell_style
+            ),
+            Paragraph(
+                "<b>₹599 – ₹899 / month</b><br/>"
+                "(~$7 – $11 / month)<br/>"
+                "<i>Billed annually: ~₹7,188/yr</i>",
+                table_cell_bold
+            ),
+            Paragraph(
+                "<b>Mumbai, India Data Center.</b><br/>"
+                "Lowest latency for Indian B2B wholesalers and D2C traffic. Easily handles Django (3 Gunicorn worker replicas) + React Vite frontend + Redis + Celery + self-hosted PostgreSQL.",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>Hostinger VPS</b><br/>(High-Volume Scale)", table_cell_bold),
+            Paragraph(
+                "<b>Plan: KVM 4 (High Scale)</b><br/>"
+                "• 4 vCPU Cores<br/>"
+                "• 16 GB RAM<br/>"
+                "• 200 GB NVMe Disk Space<br/>"
+                "• 16 TB Bandwidth",
+                table_cell_style
+            ),
+            Paragraph(
+                "<b>₹1,199 – ₹1,499 / month</b><br/>"
+                "(~$14 – $18 / month)<br/>"
+                "<i>Billed annually: ~₹14,388/yr</i>",
+                table_cell_bold
+            ),
+            Paragraph(
+                "<b>Recommended when monthly order volume exceeds 5,000+ orders.</b> "
+                "Provides massive headroom for high-frequency ReportLab vector PDF invoice generation and concurrent FEFO warehouse queries.",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>Hetzner Cloud</b><br/>(Industry Benchmark Performance)", table_cell_bold),
+            Paragraph(
+                "<b>Plan: CPX31 (Dedicated AMD)</b><br/>"
+                "• 4 vCPU (AMD EPYC)<br/>"
+                "• 8 GB RAM<br/>"
+                "• 160 GB NVMe SSD<br/>"
+                "• 20 TB Traffic",
+                table_cell_style
+            ),
+            Paragraph(
+                "<b>€14.50 / month</b><br/>"
+                "(~₹1,320 / month)<br/>"
+                "<i>Pay-as-you-go hourly</i>",
+                table_cell_bold
+            ),
+            Paragraph(
+                "<b>Falkenstein / Helsinki / Ashburn.</b><br/>"
+                "Extreme price-to-performance ratio with dedicated AMD EPYC server cores. Exceptional reliability and automated snapshot backups.",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>DigitalOcean</b><br/>(Developer Cloud)", table_cell_bold),
+            Paragraph(
+                "<b>Plan: Premium AMD Droplet</b><br/>"
+                "• 2 vCPU Cores<br/>"
+                "• 4 GB RAM (or 8 GB: $48/mo)<br/>"
+                "• 80 GB NVMe SSD",
+                table_cell_style
+            ),
+            Paragraph(
+                "<b>$24.00 – $48.00 / month</b><br/>"
+                "(~₹2,000 – ₹4,000 / month)",
+                table_cell_bold
+            ),
+            Paragraph(
+                "<b>Bangalore, India (BLR1) Data Center.</b><br/>"
+                "Established developer platform with seamless 1-click snapshot backups and floating IP failover.",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>AWS EC2</b><br/>(Enterprise Scalability)", table_cell_bold),
+            Paragraph(
+                "<b>Plan: t4g.xlarge (ARM Graviton2)</b><br/>"
+                "• 4 vCPU Cores<br/>"
+                "• 16 GB RAM<br/>"
+                "• EBS gp3 Storage",
+                table_cell_style
+            ),
+            Paragraph(
+                "<b>~$65.00 – $85.00 / month</b><br/>"
+                "(~₹5,500 – ₹7,200 / month)",
+                table_cell_bold
+            ),
+            Paragraph(
+                "<b>Mumbai (ap-south-1).</b> Enterprise tier with AWS CloudWatch monitoring, VPC isolation, and integration with AWS RDS.",
+                table_cell_style
+            )
+        ]
+    ]
+
+    t_vps = Table([headers_vps] + rows_vps, colWidths=[90, 130, 115, 188])
+    t_vps.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_vps)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 4: Production Database Services Handover, Architectures & Pricing
+    # =========================================================================
+    story.append(Paragraph("4. Production Database Services Handover, Architecture Options & Pricing", h1_style))
+    story.append(Paragraph(
+        "Pura Stone ERP uses PostgreSQL 16 with pessimistic row-locking (<code>select_for_update()</code>) to guarantee zero inventory overselling. "
+        "You can choose between an included self-hosted database or a managed cloud database service.",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    headers_db = [
+        Paragraph("Database Architecture Option", table_header_style),
+        Paragraph("Service Provider & Plan", table_header_style),
+        Paragraph("Monthly Cost", table_header_style),
+        Paragraph("Required Credentials from Client & Architecture Details", table_header_style),
+    ]
+
+    rows_db = [
+        [
+            Paragraph("<b>OPTION A: Self-Hosted PostgreSQL 16</b><br/>(Top Recommended — Zero Extra Cost)", table_cell_bold),
+            Paragraph("<b>Runs directly on your VPS Server</b><br/>Configured with PgBouncer connection pooling and local NVMe storage.", table_cell_style),
+            Paragraph("<b>₹0 / month</b><br/>(Included inside VPS hosting plan)", table_cell_bold),
+            Paragraph(
+                "<b>NO EXTERNAL CREDENTIALS REQUIRED.</b><br/>"
+                "Our team configures PostgreSQL 16 on your VPS with an automated cron job that dumps the database daily, encrypts it with AES-256, and uploads it to secure off-site cloud storage (Cloudflare R2/S3). Most cost-effective solution.",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>OPTION B1: Supabase Pro</b><br/>(Managed Cloud Database)", table_cell_bold),
+            Paragraph(
+                "<b>Supabase Pro Tier</b><br/>"
+                "• Dedicated PostgreSQL 15/16<br/>"
+                "• 8 GB Database Storage (expandable)<br/>"
+                "• Built-in PgBouncer Pooling<br/>"
+                "• Daily Automated Backups (7-day retention)",
+                table_cell_style
+            ),
+            Paragraph("<b>$25.00 / month</b><br/>(~₹2,100 / month)", table_cell_bold),
+            Paragraph(
+                "<b>Credentials to Provide:</b><br/>"
+                "• Supabase Dashboard Login (Email & Password)<br/>"
+                "• Database Connection String (URI):<br/>"
+                "<code>postgres://postgres.[ref]:[pass]@aws-0-ap-south-1.pooler.supabase.com:6543/postgres</code><br/>"
+                "• Direct Database Password",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>OPTION B2: Neon Serverless Postgres</b><br/>(Auto-Scaling Cloud DB)", table_cell_bold),
+            Paragraph(
+                "<b>Neon Launch / Scale Plan</b><br/>"
+                "• Serverless Postgres with instant branching<br/>"
+                "• Point-in-time recovery<br/>"
+                "• Dedicated compute endpoints",
+                table_cell_style
+            ),
+            Paragraph("<b>$19.00 / month</b><br/>(~₹1,600 / month)", table_cell_bold),
+            Paragraph(
+                "<b>Credentials to Provide:</b><br/>"
+                "• Neon Cloud Console Login (Email & Password)<br/>"
+                "• Pooled Connection String (Host, User, Password, DB Name)",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>OPTION B3: AWS RDS PostgreSQL</b><br/>(Enterprise Managed)", table_cell_bold),
+            Paragraph(
+                "<b>AWS RDS db.t4g.medium</b><br/>"
+                "• 2 vCPU, 4 GB RAM<br/>"
+                "• Multi-AZ automated failover<br/>"
+                "• Automated AWS snapshot patching",
+                table_cell_style
+            ),
+            Paragraph("<b>~$45.00 – $60.00 / month</b><br/>(~₹3,800 – ₹5,000 / month)", table_cell_bold),
+            Paragraph(
+                "<b>Credentials to Provide:</b><br/>"
+                "• AWS Management Console Login or IAM User with RDS Admin permissions.<br/>"
+                "• RDS Endpoint URL, Master Username, and Master Password.",
+                table_cell_style
+            )
+        ]
+    ]
+
+    t_db = Table([headers_db] + rows_db, colWidths=[105, 120, 95, 203])
+    t_db.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_db)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 5: Domain, DNS, SSL & Cloud Storage Handover
+    # =========================================================================
+    story.append(Paragraph("5. Domain, DNS, SSL & Cloud Object Storage Credentials Handover", h1_style))
+    story.append(Paragraph(
+        "To bind your live custom domain, issue automated SSL/TLS certificates, and store generated PDF invoices, the team requires the following access:",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    headers_dns = [
+        Paragraph("Infrastructure Layer", table_header_style),
+        Paragraph("Required Credentials / Access", table_header_style),
+        Paragraph("Recommended Provider & Pricing", table_header_style),
+        Paragraph("Subdomain Routing & Function", table_header_style),
+    ]
+
+    rows_dns = [
+        [
+            Paragraph("<b>DNS & Domain Registrar</b><br/>(Cloudflare / GoDaddy / Namecheap)", table_cell_bold),
+            Paragraph(
+                "• Domain Registrar / Cloudflare Login (Email & Password)<br/>"
+                "• OR invite developer as DNS Administrator in Cloudflare.",
+                table_cell_style
+            ),
+            Paragraph(
+                "<b>Cloudflare Free Tier (₹0)</b><br/>"
+                "Top recommended. Includes free automatic SSL/TLS, edge caching, DDoS mitigation, and Brotli compression.",
+                table_cell_style
+            ),
+            Paragraph(
+                "Routes traffic to:<br/>"
+                "• <code>app.purastone.com</code> (React ERP Frontend)<br/>"
+                "• <code>api.purastone.com</code> (Django REST API & Webhooks)<br/>"
+                "• <code>tms.purastone.com</code> (Wholesale & Driver Tracking)",
+                table_cell_style
+            )
+        ],
+        [
+            Paragraph("<b>Cloud Storage for PDFs & Documents</b><br/>(Invoices, LRs & COAs)", table_cell_bold),
+            Paragraph(
+                "• S3 / R2 Account ID<br/>"
+                "• <code>Access Key ID</code><br/>"
+                "• <code>Secret Access Key</code><br/>"
+                "• Bucket Name: <code>purastone-docs-prod</code>",
+                table_cell_code
+            ),
+            Paragraph(
+                "<b>Cloudflare R2 (₹0 – ₹150/mo)</b><br/>"
+                "10 GB free storage, zero egress bandwidth fees.<br/>"
+                "<i>AWS S3 alternative: ~$2 – $5/mo.</i>",
+                table_cell_style
+            ),
+            Paragraph(
+                "Permanent AES-256 encrypted storage for generated Tax Invoices, Lorry Receipts (LR), Certificates of Analysis (COA), and dispatch packing slips.",
+                table_cell_style
+            )
+        ]
+    ]
+
+    t_dns = Table([headers_dns] + rows_dns, colWidths=[105, 135, 115, 168])
+    t_dns.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_dns)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 6: Master Skincare Catalog & Omnichannel SKU Mapping
+    # =========================================================================
+    story.append(Paragraph("6. Master Skincare Catalog & Omnichannel SKU Directory", h1_style))
+    story.append(Paragraph(
+        "Required to map internal Pura Stone formulations to external marketplace identifiers (Shopify Variant ID, Amazon ASIN/SellerSKU, Flipkart FSN). "
+        "Please provide an Excel or CSV file containing these columns:",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    headers_sku = [
+        Paragraph("Field Name", table_header_style),
+        Paragraph("Data Type / Example", table_header_style),
+        Paragraph("Source / Department", table_header_style),
+        Paragraph("System Function & Business Impact", table_header_style),
+    ]
+
+    rows_sku = [
+        [
+            Paragraph("<code>internal_sku</code>", table_cell_code),
+            Paragraph("String: <code>PURA-ALUM-ROLLON-100</code>", table_cell_style),
+            Paragraph("R&D / Brand Master", table_cell_style),
+            Paragraph("Primary foreign key uniting physical batches, B2B wholesale orders, and marketplace settlements.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>product_name & line</code>", table_cell_code),
+            Paragraph("String: <i>Natural Alum Deodorant 100g (Core Mineral)</i>", table_cell_style),
+            Paragraph("Marketing / Catalog", table_cell_style),
+            Paragraph("Display name printed on GST Tax Invoices, Transporter Lorry Receipts, and Master Carton Labels.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>mrp, ptr & pts</code>", table_cell_code),
+            Paragraph("Decimal (INR): <code>999.00 / 750.00 / 600.00</code>", table_cell_style),
+            Paragraph("Sales & Commercials", table_cell_style),
+            Paragraph("Enforces wholesale pricing tiers (Tier A/B/C) and prevents orders from falling below minimum margin floors.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>formulation_cogs & pack_cost</code>", table_cell_code),
+            Paragraph("Decimal (INR): <code>185.50 / 45.00</code>", table_cell_style),
+            Paragraph("Cost Accounting / Lab", table_cell_style),
+            Paragraph("Subtracted from Net Revenue to compute exact <b>CM1 (Contribution Margin 1)</b>.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>shopify_variant_id</code>", table_cell_code),
+            Paragraph("Numeric: <code>44981298410291</code>", table_cell_code),
+            Paragraph("Shopify Storefront", table_cell_style),
+            Paragraph("Direct webhook matching for real-time inventory allocation upon customer checkout.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>amazon_asin & seller_sku</code>", table_cell_code),
+            Paragraph("String: <code>B09X1Y2Z3A / PURA-ALUM-FBA</code>", table_cell_code),
+            Paragraph("Amazon Seller Central", table_cell_style),
+            Paragraph("Links Amazon SP-API Order Reports to formulation batch inventory and settlement fees.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>flipkart_fsn</code>", table_cell_code),
+            Paragraph("String: <code>SKUFC8912781920</code>", table_cell_code),
+            Paragraph("Flipkart Seller Hub", table_cell_style),
+            Paragraph("Matches Flipkart Seller Settlement API records against physical stock dispatches.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>hsn_code & gst_rate</code>", table_cell_code),
+            Paragraph("String: <code>33049990</code> | Decimal: <code>18.00%</code>", table_cell_style),
+            Paragraph("Tax & Finance", table_cell_style),
+            Paragraph("Calculates IGST (inter-state) vs CGST+SGST (intra-state) splits on all tax invoices.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>dimensions & gross_weight</code>", table_cell_code),
+            Paragraph("L×W×H (cm): <code>12×5×5</code> | Weight: <code>140g</code>", table_cell_style),
+            Paragraph("Packaging Master", table_cell_style),
+            Paragraph("Computes volumetric weight vs dead weight in the TMS freight engine for accurate shipping quotes.", table_cell_style)
+        ]
+    ]
+
+    t_sku = Table([headers_sku] + rows_sku, colWidths=[105, 125, 105, 188])
+    t_sku.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_sku)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 7: Physical Warehouse Locations & Live FEFO Batch Inventory
+    # =========================================================================
+    story.append(Paragraph("7. Physical Warehouse Locations & Live FEFO Batch Traceability", h1_style))
+    story.append(Paragraph(
+        "To populate the live stock ledger, please provide current physical inventory count by warehouse location, formulation batch, and expiry dates.",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    headers_inv = [
+        Paragraph("Warehouse / Location Dimension", table_header_style),
+        Paragraph("Field Format / Example", table_header_style),
+        Paragraph("Operational Meaning", table_header_style),
+        Paragraph("System Enforcement", table_header_style),
+    ]
+
+    rows_inv = [
+        [
+            Paragraph("<code>Warehouse Identifier</code>", table_cell_code),
+            Paragraph("<code>WH-MUM-CENTRAL</code> (Bhiwandi Hub)", table_cell_style),
+            Paragraph("Central Fulfillment & Dispatch Hub", table_cell_style),
+            Paragraph("Determines origin state GSTIN for tax invoices and origin pincode for freight calculation.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Aisle, Row, Shelf, Bin</code>", table_cell_code),
+            Paragraph("<code>Aisle: A-02, Row: 03, Shelf: S-01, Bin: B-04</code>", table_cell_style),
+            Paragraph("Exact Physical Storage Coordinates", table_cell_style),
+            Paragraph("Guides pickers directly to the physical shelf during dispatch, preventing search delays.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Batch ID & Mfg Date</code>", table_cell_code),
+            Paragraph("<code>BAT-2026-MUM-01</code> | <code>2026-04-10</code>", table_cell_style),
+            Paragraph("Manufacturing Lot Identifier", table_cell_style),
+            Paragraph("Mandatory on cosmetic labels under Indian Drugs and Cosmetics Rules for quality tracing.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Expiry Date (FEFO Key)</code>", table_cell_code),
+            Paragraph("<code>2027-10-10</code> (ISO 8601)", table_cell_style),
+            Paragraph("Product Expiration Date", table_cell_style),
+            Paragraph("Strict chronological sorting: closest-to-expire batches are allocated first; near-expiry (<60 days) batches are locked from B2B wholesale.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Batch Landed COGS</code>", table_cell_code),
+            Paragraph("Decimal (INR): <code>182.40 / unit</code>", table_cell_style),
+            Paragraph("Actual Formulation Cost of Lot", table_cell_style),
+            Paragraph("Enables exact batch-wise COGS calculation rather than broad monthly averages.", table_cell_style)
+        ]
+    ]
+
+    t_inv = Table([headers_inv] + rows_inv, colWidths=[110, 135, 120, 158])
+    t_inv.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_inv)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 8: B2B Wholesaler, Stockist & Distributor Registry
+    # =========================================================================
+    story.append(Paragraph("8. B2B Wholesaler, Stockist & Distributor Registry", h1_style))
+    story.append(Paragraph(
+        "Required to onboard existing commercial wholesale partners, configure tier discount matrices, credit limits, and branch child IDs.",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    headers_b2b = [
+        Paragraph("Wholesaler Master Field", table_header_style),
+        Paragraph("Validation Rule / Format", table_header_style),
+        Paragraph("Example Record", table_header_style),
+        Paragraph("Business Impact & ERP Workflow", table_header_style),
+    ]
+
+    rows_b2b = [
+        [
+            Paragraph("<code>Legal Company Name</code>", table_cell_code),
+            Paragraph("String (as registered on MCA/GST)", table_cell_style),
+            Paragraph("Aura Wellness Retail Pvt Ltd", table_cell_style),
+            Paragraph("Legal parent entity holding credit terms and master contracts.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Parent GSTIN</code>", table_cell_code),
+            Paragraph("15-char regex: <code>^[0-9]{2}[A-Z]{5}...</code>", table_cell_code),
+            Paragraph("<code>27AABCA1234F1Z5</code>", table_cell_code),
+            Paragraph("Validates registered tax status and determines inter-state vs intra-state invoice taxation.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Trade / Cosmetic License</code>", table_cell_code),
+            Paragraph("Form 20B/21B Drug License #", table_cell_style),
+            Paragraph("<code>DL-MH-MUM-2026-991</code>", table_cell_code),
+            Paragraph("Compliance check before authorizing bulk mineral skincare dispatches.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Credit Limit & Period</code>", table_cell_code),
+            Paragraph("Amount in INR & Days", table_cell_style),
+            Paragraph("₹5,00,000 limit & 30 days net", table_cell_style),
+            Paragraph("Blocks dispatch when outstanding ledger balance exceeds credit limit.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Pricing Tier Slabs</code>", table_cell_code),
+            Paragraph("Tier A / B / C or Custom Matrix", table_cell_style),
+            Paragraph("Tier A (100–499 pcs: 25% off MRP)", table_cell_style),
+            Paragraph("Automatically prices wholesale orders with floor margin protection.", table_cell_style)
+        ],
+        [
+            Paragraph("<code>Retail Branch Stores (Child IDs)</code>", table_cell_code),
+            Paragraph("Store ID, Address, Branch GSTIN", table_cell_style),
+            Paragraph("<code>AURA-MUM-01</code> (Bandra West Flagship)", table_cell_style),
+            Paragraph("Enables branch-specific delivery challans, Transporter LRs, and tracking logins.", table_cell_style)
+        ]
+    ]
+
+    t_b2b = Table([headers_b2b] + rows_b2b, colWidths=[110, 115, 120, 178])
+    t_b2b.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_b2b)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 9: Financial Accounting Baseline & Fixed OPEX Ledger
+    # =========================================================================
+    story.append(Paragraph("9. Financial Accounting Baseline, Formulation Costs & Fixed OPEX Ledger", h1_style))
+    story.append(Paragraph(
+        "To activate the CEO Financial Command Center and calculate real-time EBITDA, Net Profit, and Cash Runway, provide the following monthly fixed costings:",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    headers_opex = [
+        Paragraph("OPEX Expense Category", table_header_style),
+        Paragraph("Frequency / Baseline Value", table_header_style),
+        Paragraph("Expense Bucket in ERP", table_header_style),
+        Paragraph("P&L Mathematical Impact", table_header_style),
+    ]
+
+    rows_opex = [
+        [
+            Paragraph("<b>Warehouse & Fulfillment Lease</b>", table_cell_bold),
+            Paragraph("Monthly Lease (e.g. ₹1,20,000/mo)", table_cell_style),
+            Paragraph("<code>WAREHOUSE_RENT_OPS</code>", table_cell_code),
+            Paragraph("Subtracted from CM3 to calculate true Operating EBITDA.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Core Payroll & Staff Wages</b>", table_cell_bold),
+            Paragraph("Monthly Net Payroll (e.g. ₹3,50,000/mo)", table_cell_style),
+            Paragraph("<code>PAYROLL_SALARIES</code>", table_cell_code),
+            Paragraph("Fixed operational overhead allocated across the calendar month.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Software, Cloud Hosting & SaaS</b>", table_cell_bold),
+            Paragraph("Monthly Cloud Costs (e.g. ₹25,000/mo)", table_cell_style),
+            Paragraph("<code>SAAS_TECH_SOFTWARE</code>", table_cell_code),
+            Paragraph("Deducted from monthly gross profit to track software burn rate.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>PR Seeding & Complimentary Testers</b>", table_cell_bold),
+            Paragraph("Actual Formulation Cost (INR)", table_cell_style),
+            Paragraph("<code>TESTER_PR_SEEDING</code>", table_cell_code),
+            Paragraph("Deducted in <b>CM3</b> to account for influencer marketing product costs.", table_cell_style)
+        ],
+        [
+            Paragraph("<b>Opening Liquid Cash & Bank Balances</b>", table_cell_bold),
+            Paragraph("Total Available Cash in INR", table_cell_style),
+            Paragraph("<code>OPENING_CASH_BALANCE</code>", table_cell_code),
+            Paragraph("Divided by monthly Net Burn Rate to compute exact <b>Cash Runway in Months</b>.", table_cell_style)
+        ]
+    ]
+
+    t_opex = Table([headers_opex] + rows_opex, colWidths=[110, 115, 120, 178])
+    t_opex.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+    ]))
+    story.append(t_opex)
+    story.append(Spacer(1, 10))
+
+    # =========================================================================
+    # SECTION 10: Master Action Checklist & Secure Transmission Protocol
+    # =========================================================================
+    story.append(Paragraph("10. Master Onboarding Action Checklist & Secure Handover Protocol", h1_style))
+    story.append(Paragraph(
+        "Please follow this sequence to securely provide credentials and data files to our implementation team:",
+        body_style
+    ))
+    story.append(Spacer(1, 4))
+
+    action_html = (
+        "<b>OFFICIAL STEP-BY-STEP HANDOVER CHECKLIST:</b><br/>"
+        "<b>1. VPS Hosting Platform:</b> Share your Hostinger / Hetzner / DigitalOcean control panel login or server root SSH access (Section 3).<br/>"
+        "<b>2. Database Services:</b> Confirm whether you want included Self-Hosted PostgreSQL 16 (₹0 extra) or share Managed DB credentials (Section 4).<br/>"
+        "<b>3. Omnichannel APIs:</b> Generate and copy API credentials from Shopify, Amazon SP-API, Flipkart, and Razorpay using the step-by-step guides in Section 1.<br/>"
+        "<b>4. Ad Accounts & Logistics:</b> Generate Meta Marketing API token and logistics credentials as detailed in Section 2.<br/>"
+        "<b>5. Master Catalog & Stock Take:</b> Export your product master table (Section 6) and initial physical batch stock counts (Section 7) into Excel/CSV.<br/>"
+        "<b>6. Wholesale Directory & OPEX:</b> Share list of active B2B stockists (Section 8) and monthly fixed costs (Section 9).<br/><br/>"
+        "<b>SECURE CREDENTIALS TRANSMISSION PROTOCOL:</b><br/>"
+        "To ensure maximum security, <b>never send production passwords or API secrets in plain text over unencrypted chat</b>. "
+        "Please transmit all credentials using one of the following secure methods:<br/>"
+        "• <b>Option A (Preferred):</b> Share via a password-protected, self-destructing link using <b>Bitwarden Send</b> or <b>1Password</b>.<br/>"
+        "• <b>Option B:</b> Encrypted ZIP archive with an AES-256 password sent via a separate channel (e.g. Signal / SMS).<br/>"
+        "• <b>Option C:</b> Directly invite our technical team email to your Shopify, Meta, Amazon, and Hosting accounts with Developer/Admin privileges."
+    )
+    action_table = Table([[Paragraph(action_html, green_callout_style)]], colWidths=[523])
+    action_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f0fdf4")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#bbf7d0")),
+        ('TOPPADDING', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+        ('LEFTPADDING', (0, 0), (-1, -1), 9),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 9),
+    ]))
+    story.append(action_table)
 
     # Build Document
     doc.build(story, canvasmaker=NumberedCanvas)
-    print(f"Successfully generated onboarding PDF: {filename}")
+    print(f"Successfully generated updated onboarding PDF: {filename}")
+
 
 if __name__ == '__main__':
     filename = sys.argv[1] if len(sys.argv) > 1 else "PURA_STONE_DATA_ONBOARDING_AND_INTEGRATION_GUIDE.pdf"
